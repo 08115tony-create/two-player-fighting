@@ -3,23 +3,6 @@
 六名擬真動漫格鬥家、六個對戰場景，每人三招加一個大招。
 三種玩法：電腦對戰、雙人同機、P2P 線上邀請碼真人對戰。
 
-## 放到 GitHub Pages 的步驟
-
-1. 先把壓縮包解開，會得到資料夾 `two-player-fighting`。
-2. 在 GitHub 建立一個新的 repository（例如取名 `two-player-fighting`）。
-3. 把 `two-player-fighting` 資料夾**裡面的全部檔案**上傳到 repository 的根目錄：
-   - 重點：`index.html` 必須直接在根目錄，不要多包一層資料夾。
-   - 資料夾裡的 `.nojekyll` 也要一起上傳（GitHub 網頁上傳可能會漏掉隱藏檔，漏了也沒關係，不影響遊玩）。
-   - GitHub 網頁上傳單次有檔案數量／大小限制；檔案太多上傳不完時，改用 GitHub Desktop 或 git 指令整包 push 上去最穩。
-4. 上傳完成後，進 repository 的 **Settings → Pages**：
-   - Source 選 **Deploy from a branch**
-   - Branch 選 **main**、資料夾選 **/(root)**，按 Save。
-5. 等 1～3 分鐘，Pages 頁面會顯示公開網址，格式是：
-   `https://<你的帳號>.github.io/<repository 名稱>/`
-   誰拿到連結都能直接打開玩，不用登入。
-
-之後要更新版本：把新版檔案同樣上傳覆蓋舊檔即可，網址不變。
-
 ## 玩法
 
 - **電腦對戰**：3 種難度，選角後隨機對手。
