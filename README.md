@@ -28,4 +28,4 @@
 - 大招演出：氣滿放招時招式名稱大字＋半身特寫＋時間暫緩，線上雙端同步
 - 隨機選角：三種玩法選角都有「隨機選角」；點了隨機仍可改按其他角色改選，只有最後以隨機開戰時才在開戰那一刻揭曉抽到誰
 - 線上修正：身體碰撞不穿身（最小間距 98）、跳躍可跳過對手換位、攻擊方判定命中只扣一次血、防卡頓快照處理
-- 線上遊玩網址：[https://08115tony-create.github.io/two-player-fighting/]()
+- 線上遊玩網址：[https://08115tony-create.github.io/two-player-fighting/](https://08115tony-create.github.io/two-player-fighting/)
