@@ -446,7 +446,18 @@ function startBattle(container, opts){
     endUltCinematic();
     const w=defs[winnerIdx];
     const ov=container.querySelector("#overOverlay");
-    ov.innerHTML=`<div class="ko">K.O.</div><img class="winner-img" src="${PORTRAITS[w.id]}" style="--ring:${w.color}" alt=""><p class="winner-text"><b style="color:${w.accent}">${w.name}・${w.title}</b> 獲勝！${winnerIdx===playerSide?" 🎉":""}</p><p class="over-stage">🗺️ 場景：${stage.name}（再戰沿用此場景，換場景請回主選單）</p><p class="rematch-note hidden" id="rematchNote">已送出再戰邀請，等待對手同意…</p><div class="over-btns" id="overBtns"><button class="btn-primary" id="rematchBtn">再戰一場</button><button class="btn-ghost" id="overExit">回主選單</button></div>`;
+    /* WIN／LOSE 大字：電腦對戰與線上真人對戰才顯示，一律以「本機玩家視角」判定
+       （線上雙方各自執行 showOver，winnerIdx 相同但 playerSide 相反，所以贏方看到
+       WIN、輸方看到 LOSE）；雙人同機依用戶指示不改，不顯示 verdict。
+       verdict 放在 K.O. 之前、一般文件流內，不會遮住 K.O.；
+       結算層本身改全視口固定覆蓋＋安全置中（見 style.css #overOverlay），
+       K.O. 與所有元素在手機／平板／全螢幕都不會被擂台高度裁切。 */
+    const verdictHtml = opponent!=="local"
+      ? (winnerIdx===playerSide
+          ? `<div class="verdict win" id="verdictText">WIN</div><p class="verdict-sub win">🏆 你打贏了！</p>`
+          : `<div class="verdict lose" id="verdictText">LOSE</div><p class="verdict-sub lose">你被擊敗了…再接再厲！</p>`)
+      : "";
+    ov.innerHTML=`<div class="over-inner">${verdictHtml}<div class="ko">K.O.</div><img class="winner-img" src="${PORTRAITS[w.id]}" style="--ring:${w.color}" alt=""><p class="winner-text"><b style="color:${w.accent}">${w.name}・${w.title}</b> 獲勝！${winnerIdx===playerSide?" 🎉":""}</p><p class="over-stage">🗺️ 場景：${stage.name}（再戰沿用此場景，換場景請回主選單）</p><p class="rematch-note hidden" id="rematchNote">已送出再戰邀請，等待對手同意…</p><div class="over-btns" id="overBtns"><button class="btn-primary" id="rematchBtn">再戰一場</button><button class="btn-ghost" id="overExit">回主選單</button></div></div>`;
     ov.classList.remove("hidden");
     ov.querySelector("#rematchBtn").addEventListener("click",()=>{
       if(online){ rematchMine=true; Net.send({t:"rematch"}); ov.querySelector("#rematchNote").classList.remove("hidden"); ov.querySelector("#overBtns").classList.add("hidden"); if(rematchTheirs) resetFight(); }
