@@ -44,7 +44,7 @@ function showMenu(errMsg){
   appEl.innerHTML=`<div class="wrap">
   <div class="hero"><div class="hero-cards"><img class="hc left" src="${PORTRAITS.gouki}" alt=""><img class="hc right" src="${PORTRAITS.yuki}" alt=""></div>
     <p class="hero-kicker">TWO-PLAYER FIGHTING</p><h1>拳魂對決・雙人格鬥</h1>
-    <p class="hero-sub">十二名格鬥家（6 位經典＋6 位特殊）、三招一式加大招，經典角色還有主場 BUFF。和電腦一較高下，或開房間拿到邀請碼，邀朋友來一場真人對決。</p>
+    <p class="hero-sub">十二名格鬥家（6 位經典＋6 位特殊）、三招式加大招，經典角色還有主場 BUFF。和電腦一較高下，或開房間拿到邀請碼，邀朋友來一場真人對決。</p>
     <div class="hero-mobile"><img src="${PORTRAITS.gouki}" alt=""><span class="vs-i">VS</span><img src="${PORTRAITS.yuki}" alt=""></div></div>
   ${errMsg?`<p class="err-banner">${errMsg}</p>`:""}
   <div class="mode-grid">
@@ -63,7 +63,7 @@ function showMenu(errMsg){
   <h2 class="gallery-h">角色圖鑑 <span>12 位格鬥家，點角色看性能面板與招式表；✨為特殊角色（無場地 BUFF、大招是特殊效果）</span></h2>
   <div class="gallery">${FIGHTERS.map(f=>`<button type="button" class="g-item ${gallerySel===f.id?"sel":""}" data-id="${f.id}"><img src="${PORTRAITS[f.id]}" alt="${f.name}・${f.title} 半身立繪" loading="lazy"><span class="g-name">${f.name}<span style="color:${f.accent}">${f.title}</span></span></button>`).join("")}</div>
   <div class="gallery-detail" id="galleryDetail">${fighterDetail(fighterById(gallerySel))}</div>
-  <footer class="foot">操作：P1＝A/D 移動・W 跳躍・S 蹲下（兼格擋，大幅減傷）・F/G/H 三招・T 大招（氣滿 100%）；P2（同機）＝方向鍵移動・J/K/L 三招・I 大招｜手機會自動顯示觸控按鈕</footer></div>`;
+  <footer class="foot">操作：P1＝A/D 移動・W 跳躍・S 蹲下（兼格擋，大幅減傷）・F/G/H 三招・T 大招（氣滿 100%）；P2（同機）＝方向鍵移動・J/K/L 三招・I 大招｜手機／平板會自動顯示觸控按鈕（方向圖示＋完整招式名），對戰畫面右上角可切換全螢幕</footer></div>`;
   bindStagePicker(appEl);
   appEl.querySelectorAll("[data-diff]").forEach(b=>b.addEventListener("click",()=>{ difficulty=b.dataset.diff; showMenu(); }));
   appEl.querySelector("#cpuBtn").addEventListener("click",()=>showSelect("cpu"));

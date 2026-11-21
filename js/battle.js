@@ -54,6 +54,8 @@ function startBattle(container, opts){
     <div class="arena-box">
       <canvas id="arena" aria-label="對戰擂台"></canvas>
       <div class="stage-chip">🗺️ ${stage.name}・${stage.en}</div>
+      <button type="button" class="fs-btn" id="fsBtn" aria-label="切換全螢幕">⛶ 全螢幕</button>
+      <div class="fs-toast hidden" id="fsToast" role="status"></div>
       <div class="ult-cine hidden" id="ultOverlay" aria-hidden="true"><div class="ult-shade"></div><div class="ult-lines"></div><img class="ult-portrait" id="ultPortrait" src="" alt=""><div class="ult-text"><div class="ult-kicker">⚡ ULTIMATE ・ 大招解放</div><div class="ult-char" id="ultChar"></div><div class="ult-move" id="ultMove"></div><div class="ult-desc" id="ultDesc"></div></div></div>
       <div class="overlay" id="introOverlay"><div class="vs-row"><img src="${PORTRAITS[defs[0].id]}" style="--ring:${defs[0].color};transform:rotate(-3deg)" alt=""><span class="vs">VS</span><img src="${PORTRAITS[defs[1].id]}" style="--ring:${defs[1].color};transform:rotate(3deg)" alt=""></div><div class="intro-text" id="introText">READY</div><div class="intro-stage">🗺️ ${stage.name}</div>${(defs[0].stageBuff||defs[1].stageBuff)?`<div class="intro-buff">⚡ 主場 BUFF：${[defs[0],defs[1]].filter(d=>d.stageBuff).map(d=>d.name).join("、")} 四項性能 +5%</div>`:""}</div>
       <div class="overlay hidden" id="overOverlay"></div>
@@ -79,7 +81,7 @@ function startBattle(container, opts){
     movesRow.innerHTML = `<div class="moves-line"><span class="moves-title">我的招式</span>${moveChips(myDef,["F","G","H"])}${ultChip(myDef,"T",playerSide)}<button class="chip btn-chip" id="exitBtn">離開對戰</button></div>`;
   }
   let destroyed=false, raf=0, sim=null;
-  const keys=emptyInput(), keys2=emptyInput(), touch=emptyInput();
+  const keys=emptyInput(), keys2=emptyInput(), touch=emptyInput(), touch2=emptyInput();
   let cpu={nextThink:0,plan:emptyInput(),planUntil:0};
   let remoteSnap=null, appliedSnap=null, snapSendSeq=0, lastRemoteSeq=0, remoteAtkStart=0, pendingRemote=null, introStage=-1;
   /* 線上扣血改「攻擊方判定、防守方套用」：攻擊方在自己畫面上命中（與離線同一套
@@ -89,6 +91,7 @@ function startBattle(container, opts){
      明明打中卻不扣血。hitProcessed 防重複套用，remoteAtkSeen 做時效檢查。 */
   let hitProcessed=new Set(), remoteAtkSeen=new Map();
   let effectSeen=new Set(); // 線上特殊大招效果（時間停止／大招封印）以 atkSeq 去重，只套用一次
+  let hitAckSeen=new Set(); // 線上氣量：防守方回傳的命中確認（hitack）以 atkSeq 去重，攻擊方每招只加一次氣
   let phase="intro", winnerIdx=null, rematchMine=false, rematchTheirs=false, declared=false, oppLeft=false;
   /* 大招演出（cinematic）：招名 + 人物特寫 + 時間暫緩。
      觸發來源必須是「已複製的權威狀態」：本地／CPU／同機由 startAttack 觸發，
@@ -127,9 +130,9 @@ function startBattle(container, opts){
     sim={ fighters:[makeFighter(defs[0],240,1),makeFighter(defs[1],720,-1)], projectiles:[],particles:[],floaters:[],strikes:[], time:0,timer:150,phase:"intro",introT:0,overT:0,shake:0,flash:0,winner:null };
     endUltCinematic(); ultSeen={0:-1,1:-1};
     lastRemoteSeq=0; pendingRemote=null; remoteSnap=null; appliedSnap=null; introStage=-1;
-    hitProcessed=new Set(); remoteAtkSeen=new Map(); effectSeen=new Set();
+    hitProcessed=new Set(); remoteAtkSeen=new Map(); effectSeen=new Set(); hitAckSeen=new Set();
     cpu={nextThink:0,plan:emptyInput(),planUntil:0}; // 再戰重置 CPU 排程，避免對手不動
-    Object.assign(keys,emptyInput()); Object.assign(keys2,emptyInput()); Object.assign(touch,emptyInput());
+    Object.assign(keys,emptyInput()); Object.assign(keys2,emptyInput()); Object.assign(touch,emptyInput()); Object.assign(touch2,emptyInput());
     phase="intro"; winnerIdx=null; declared=false; rematchMine=false; rematchTheirs=false;
     container.querySelector("#introOverlay").classList.remove("hidden");
     container.querySelector("#overOverlay").classList.add("hidden");
@@ -257,7 +260,29 @@ function startBattle(container, opts){
     hitProcessed.add(seq);
     const remoteIdx=playerSide===0?1:0, rf=sim.fighters[remoteIdx], local=sim.fighters[playerSide];
     const mv=moveOf(rf.def, atk);
-    if(mv && !local.ko) applyDamage(rf, local, mv, atk==="ult");
+    if(mv && !local.ko){
+      /* 線上氣量（攻擊＋被攻擊都加）：被攻擊方（本地）的 +6 由 applyDamage 在本機
+         套用、權威在本機，沒問題；但攻擊方的 +9 若寫在 rf 替身上，會被對方下一份
+         快照的 energy 直接蓋掉——舊版線上攻擊方因此幾乎加不到氣。改走確認制：
+         防守方在這裡依自己當下的狀態算出攻擊方應得的 gain，回 hitack 給攻擊方，
+         攻擊方在自己的機器上加給自己的角色（見 handleHitAck），兩邊都加得到。
+         gain 規則與離線 applyDamage 完全一致：一般招命中攻擊方 +9、大招命中
+         攻擊方 +0（大招本來就不回氣）；防守方無敵或反彈生效時，離線會在加氣
+         之前就提早返回，所以攻擊方 gain=0（被攻擊方在無敵時也不加、反彈時 +6，
+         都已由 applyDamage 在本機處理）。 */
+      const gain=(local.invUntil>sim.time||local.reflectUntil>sim.time)?0:(atk==="ult"?0:9);
+      applyDamage(rf, local, mv, atk==="ult");
+      Net.send({t:"hitack", seq, gain});
+    }
+  }
+  /* 線上氣量（攻擊方）：收到防守方回的 hitack 才把氣加到自己的角色上，
+     以 atkSeq 去重、每招只加一次；gain 只接受 0–9 的數字，不信任任意數值。 */
+  function handleHitAck(msg){
+    if(!sim||sim.phase!=="fight")return;
+    const seq=msg.seq, gain=msg.gain;
+    if(typeof seq!=="number"||typeof gain!=="number"||gain<0||gain>9)return;
+    if(hitAckSeen.has(seq))return; hitAckSeen.add(seq);
+    if(gain>0){ const me=sim.fighters[playerSide]; me.energy=Math.min(100,me.energy+gain); }
   }
 
   function cpuInput(me,foe){
@@ -502,15 +527,77 @@ function startBattle(container, opts){
      等待期間擂台照常渲染，角色停在 READY 畫面，不會出現影格未到就開打的閃白或跳格。 */
   let assetsReady=false, introHoldMs=0;
   preloadBattleAssets(p1Char,p2Char,stage.src).then(()=>{ assetsReady=true; });
+  /* ---------- 觸控操作（手機／平板適配） ----------
+     按鈕全部可視化：移動鈕是方向圖示＋文字說明，出招鈕直接寫完整招式名＋傷害，
+     大招鈕寫大招名＋「氣滿100%」，氣滿時會發亮（主迴圈 HUD 更新同步 .ready）。
+     單人／線上只有一組（本機玩家）；雙人同機有 P1／P2 兩組獨立操作區，
+     P2 那組綁 touch2，與鍵盤 J/K/L・I 並行不衝突。 */
   const touchRow=container.querySelector("#touchRow");
-  if("ontouchstart" in window||navigator.maxTouchPoints>0){
+  const isTouch=("ontouchstart" in window)||navigator.maxTouchPoints>0||(typeof window.matchMedia==="function"&&window.matchMedia("(pointer: coarse)").matches);
+  let touchUltBtns=[];
+  let hBtns=[]; // 十字鍵左右鍵：{ b, pos, fighter }，主迴圈依角色面向即時同步功能與標籤
+  if(isTouch){
     touchRow.classList.remove("hidden");
-    const tb=(key,label,aria,cls)=>`<button type="button" class="tbtn ${cls||""}" data-k="${key}" aria-label="${aria}">${label}</button>`;
-    touchRow.innerHTML=`<div class="tgrid">${tb("left","◀","向後")}${tb("crouch","⬇ 蹲","蹲下")}${tb("right","▶","向前")}<span></span>${tb("jump","⬆ 跳","跳躍")}<span></span></div><div class="tgrid2">${tb("a1",myDef.moves[0].name.slice(0,2),"招式一")}${tb("a2",myDef.moves[1].name.slice(0,2),"招式二")}${tb("a3",myDef.moves[2].name.slice(0,2),"招式三")}${tb("ult","大招","大招","ult-t")}</div>`;
-    touchRow.querySelectorAll(".tbtn").forEach(b=>{ const k=b.dataset.k;
-      b.addEventListener("pointerdown",e=>{e.preventDefault(); touch[k]=true;});
-      ["pointerup","pointerleave","pointercancel"].forEach(ev=>b.addEventListener(ev,()=>{touch[k]=false;}));
+    const tMove=(k,icon,cap,side,cls)=>`<button type="button" class="tbtn mv ${cls}" data-k="${k}" data-side="${side}" aria-label="${cap}"><span class="ticon">${icon}</span><span class="tcap">${cap}</span></button>`;
+    /* 十字鍵左右鍵：「位置固定、功能與標籤依面向對調」。按鈕釘在十字的左／右
+       位置不動（mv-left／mv-right），但它觸發的方向與標籤（圖示＋文字）跟著
+       角色面向走：面向右時左鍵＝左移、右鍵＝右移；面向左時對調——左鍵＝右移、
+       右鍵＝左移。等於十字鍵右側永遠是朝對手前進、左側永遠是後退，面向左的
+       玩家不用自己在腦中鏡像。上＝跳躍、下＝蹲下・格擋，永遠不對調。 */
+    const tH=(pos,side,fighter,facing)=>{
+      const dir=((pos==="left")===(facing===1))?"left":"right";
+      const icon=dir==="left"?"◀":"▶", cap=dir==="left"?"左移":"右移";
+      return `<button type="button" class="tbtn mv ${pos==="left"?"mv-left":"mv-right"}" data-pos="${pos}" data-dir="${dir}" data-side="${side}" data-fighter="${fighter}" aria-label="${cap}"><span class="ticon">${icon}</span><span class="tcap">${cap}</span></button>`; };
+    const tAtk=(m,k,side)=>`<button type="button" class="tbtn atk" data-k="${k}" data-side="${side}" aria-label="招式 ${m.name}"><span class="tname">${m.name}</span><span class="tsub">傷害 ${m.damage}</span></button>`;
+    const tUlt=(def,side)=>`<button type="button" class="tbtn atk ult-t" data-k="ult" data-side="${side}" data-ult-touch="${side}" aria-label="大招 ${def.ult.name}"><span class="tname">⚡大招 ${def.ult.name}</span><span class="tsub">${def.ult.kind==="buff"?"特殊效果":"傷害 "+def.ult.damage}・氣滿 100%</span></button>`;
+    const cluster=(def,side,fighter,label)=>{ const f0=fighter===0?1:-1;
+      return `<div class="tcluster"><div class="tcluster-label">${label}</div><div class="tcluster-body"><div class="tgrid-move">${tMove("jump","⬆","跳躍",side,"mv-up")}${tH("left",side,fighter,f0)}${tMove("crouch","⬇","蹲下・格擋",side,"mv-down")}${tH("right",side,fighter,f0)}</div><div class="tgrid-atk">${def.moves.map((m,i)=>tAtk(m,["a1","a2","a3"][i],side)).join("")}${tUlt(def,side)}</div></div></div>`; };
+    const tnote=`<div class="tnote">十字鍵：上＝跳躍、下＝蹲下・格擋；左右依角色面向自動對調（面向左時左右功能與標籤互換，位置不變）</div>`;
+    if(opponent==="local"){ touchRow.classList.add("local-pads"); touchRow.innerHTML=cluster(defs[0],0,0,"🎮 P1 操作・"+defs[0].name)+cluster(defs[1],1,1,"🎮 P2 操作・"+defs[1].name)+tnote; }
+    else touchRow.innerHTML=cluster(myDef,0,playerSide,"📱 觸控操作・"+myDef.name)+tnote;
+    touchRow.querySelectorAll(".tbtn").forEach(b=>{ const tgt=(+b.dataset.side)===1?touch2:touch;
+      const capPtr=e=>{ if(e.pointerId!=null&&b.setPointerCapture){ try{ b.setPointerCapture(e.pointerId); }catch(_){}} };
+      if(b.dataset.pos){ /* 左右鍵：按下當下依 dataset.dir（已與面向同步）決定方向並存起來，放開時清同一個，面向中途翻轉也不會卡鍵 */
+        const on=e=>{ e.preventDefault(); const dir=b.dataset.dir==="right"?"right":"left"; b._eff=dir; tgt[dir]=true; b.classList.add("on"); capPtr(e); };
+        const off=()=>{ if(b._eff){ tgt[b._eff]=false; b._eff=null; } b.classList.remove("on"); };
+        b.addEventListener("pointerdown",on);
+        ["pointerup","pointercancel","lostpointercapture","pointerleave"].forEach(ev=>b.addEventListener(ev,off));
+        b.addEventListener("contextmenu",e=>e.preventDefault());
+        hBtns.push({ b, pos:b.dataset.pos, fighter:+b.dataset.fighter });
+        return;
+      }
+      const k=b.dataset.k;
+      const on=e=>{ e.preventDefault(); tgt[k]=true; b.classList.add("on"); capPtr(e); };
+      const off=()=>{ tgt[k]=false; b.classList.remove("on"); };
+      b.addEventListener("pointerdown",on);
+      ["pointerup","pointercancel","lostpointercapture","pointerleave"].forEach(ev=>b.addEventListener(ev,off));
       b.addEventListener("contextmenu",e=>e.preventDefault()); });
+    touchUltBtns=[...touchRow.querySelectorAll("[data-ult-touch]")];
+  }
+  /* ---------- 全螢幕（手機／平板適配） ----------
+     對戰區右上角「⛶ 全螢幕」把整個對戰區切成全螢幕；進入後加 .fs-on：
+     觸控按鈕改成浮動在畫面下方、說明列隱藏，橫放矮螢幕時擂台自動縮到放得下。
+     iPhone Safari 等不支援元素全螢幕的環境，按下會顯示替代提示，不會無反應。 */
+  const wrapEl=container.querySelector(".battle-wrap");
+  const fsBtn=container.querySelector("#fsBtn");
+  const fsToast=container.querySelector("#fsToast");
+  let fsToastTimer=0;
+  function showFsToast(msg){ if(!fsToast)return; fsToast.textContent=msg; fsToast.classList.remove("hidden"); clearTimeout(fsToastTimer); fsToastTimer=setTimeout(()=>fsToast.classList.add("hidden"),3000); }
+  function syncFsUI(){ const on=!!document.fullscreenElement; wrapEl.classList.toggle("fs-on",on); if(fsBtn) fsBtn.textContent=on?"✕ 退出全螢幕":"⛶ 全螢幕"; }
+  function onFsChange(){ syncFsUI(); }
+  if(fsBtn){
+    fsBtn.addEventListener("click",()=>{
+      try{
+        if(document.fullscreenElement){ document.exitFullscreen(); return; }
+        if(!wrapEl.requestFullscreen){ showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); return; }
+        let p=null;
+        try{ p=wrapEl.requestFullscreen({navigationUI:"hide"}); }catch(_){ p=wrapEl.requestFullscreen(); }
+        if(p&&p.catch)p.catch(()=>{ try{ const p2=wrapEl.requestFullscreen(); if(p2&&p2.catch)p2.catch(()=>showFsToast("無法進入全螢幕，請將裝置橫放後再試一次")); }catch(_){ showFsToast("無法進入全螢幕，請將裝置橫放後再試一次"); } });
+        if(screen.orientation&&screen.orientation.lock){ try{ const lp=screen.orientation.lock("landscape"); if(lp&&lp.catch)lp.catch(()=>{}); }catch(_){} }
+      }catch(_){ showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); }
+    });
+    document.addEventListener("fullscreenchange",onFsChange);
+    syncFsUI();
   }
   container.querySelector("#exitBtn").addEventListener("click",exitBattle);
   container.querySelector("#leftExit").addEventListener("click",exitBattle);
@@ -544,7 +631,7 @@ function startBattle(container, opts){
     const localIn={ left:keys.left||touch.left, right:keys.right||touch.right, jump:keys.jump||touch.jump, crouch:keys.crouch||touch.crouch, a1:keys.a1||touch.a1, a2:keys.a2||touch.a2, a3:keys.a3||touch.a3, ult:keys.ult||touch.ult };
     if(opponent==="online"){ updateFighter(playerSide,localIn,dt); applyRemote(dt, realDt); }
     else if(opponent==="cpu"){ updateFighter(0,localIn,dt); updateFighter(1,cpuInput(sim.fighters[1],sim.fighters[0]),dt); }
-    else { updateFighter(0,localIn,dt); updateFighter(1,{...keys2},dt); }
+    else { updateFighter(0,localIn,dt); updateFighter(1,{ left:keys2.left||touch2.left, right:keys2.right||touch2.right, jump:keys2.jump||touch2.jump, crouch:keys2.crouch||touch2.crouch, a1:keys2.a1||touch2.a1, a2:keys2.a2||touch2.a2, a3:keys2.a3||touch2.a3, ult:keys2.ult||touch2.ult },dt); }
     resolveBodyCollision(); // 全模式（含線上）身體碰撞：雙方位置更新後統一解算，不再穿過對方
     for(const p of sim.projectiles){ p.x+=p.vx*(dt/16.7); if(p.x<-30||p.x>BW+30){p.dead=true;continue;}
       const target=sim.fighters[p.owner===0?1:0], ownerF=sim.fighters[p.owner]; if(!target||!ownerF)continue;
@@ -587,6 +674,11 @@ function startBattle(container, opts){
         fxBar.classList.toggle("hidden", items.length===0);
       }
       for(const c of ultChips) c.classList.toggle("ready",((+c.dataset.ultSide)===0?f0.energy:f1.energy)>=100);
+      for(const b of touchUltBtns) b.classList.toggle("ready",((+b.dataset.ultTouch)===0?f0.energy:f1.energy)>=100);
+      /* 十字鍵左右鍵標籤同步：角色面向翻轉（如跳過對手換位）時，左右鍵的
+         功能方向（dataset.dir）與標籤（圖示＋文字）跟著對調，位置不變。 */
+      for(const h of hBtns){ const ff=sim.fighters[h.fighter]; if(!ff)continue; const dir=((h.pos==="left")===(ff.facing===1))?"left":"right";
+        if(h.b.dataset.dir!==dir){ h.b.dataset.dir=dir; const ic=h.b.querySelector(".ticon"), cp=h.b.querySelector(".tcap"); if(ic)ic.textContent=dir==="left"?"◀":"▶"; if(cp)cp.textContent=dir==="left"?"左移":"右移"; h.b.setAttribute("aria-label",dir==="left"?"左移":"右移"); } }
     }
   };
   raf=requestAnimationFrame(loop);
@@ -597,6 +689,7 @@ function startBattle(container, opts){
     Net.onMessage=(msg)=>{
       if(msg.t==="snap"){ remoteSnap=msg.snap; }
       else if(msg.t==="hit"){ handleRemoteHit(msg); }
+      else if(msg.t==="hitack"){ handleHitAck(msg); }
       else if(msg.t==="effect"){ handleEffect(msg); }
       else if(msg.t==="reflectdmg"){ if(sim&&typeof msg.dmg==="number"&&msg.dmg>0) applyRawDamage(sim.fighters[playerSide], msg.dmg); }
       else if(msg.t==="winner"){ const wIdx=msg.winner==="host"?0:1; if(sim&&sim.phase!=="over"){ sim.winner=wIdx; sim.phase="over"; phase="over"; winnerIdx=wIdx; showOver(); } }
@@ -632,7 +725,7 @@ function startBattle(container, opts){
       case "ArrowUp": keys.jump=false; keys2.jump=false; break; case "ArrowDown": keys.crouch=false; keys2.crouch=false; break;
       case "KeyJ": keys2.a1=false; break; case "KeyK": keys2.a2=false; break; case "KeyL": keys2.a3=false; break; case "KeyI": keys2.ult=false; break; } };
   window.addEventListener("keydown",down); window.addEventListener("keyup",up);
-  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
+  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); document.removeEventListener("fullscreenchange",onFsChange); clearTimeout(fsToastTimer); if(document.fullscreenElement&&wrapEl&&document.fullscreenElement===wrapEl){ try{ document.exitFullscreen(); }catch(_){}} if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
   bgm.setMode("battle");
   return { destroy };
 }

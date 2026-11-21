@@ -146,7 +146,7 @@ button{font-family:inherit;cursor:pointer}
 .lobby-actions .btn-primary{max-width:380px}
 .wait-note{font-size:14px;color:#fcd34d;animation:pulse 1.2s infinite}
 /* battle */
-.battle-wrap{padding-top:12px}
+.battle-wrap{padding-top:12px;position:relative}
 .hud{display:flex;align-items:stretch;gap:10px}
 .hud-side{flex:1;min-width:0}
 .hud-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
@@ -190,12 +190,43 @@ button{font-family:inherit;cursor:pointer}
 .ult-chip.ready{background:#fbbf24;color:#000;border-color:#fde68a;font-weight:900;animation:pulse 1s infinite}
 .btn-chip{cursor:pointer;font-weight:700;margin-left:auto}
 .btn-chip:hover{background:rgba(255,255,255,.15)}
-.touch-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:12px}
-.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.tgrid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.tbtn{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.1);color:#fff;border-radius:12px;padding:12px;font-size:15px;font-weight:700;user-select:none;-webkit-user-select:none;touch-action:none}
-.tbtn:active{background:rgba(255,255,255,.3)}
-.tbtn.ult-t{border-color:rgba(252,211,77,.5);background:rgba(251,191,36,.25);color:#fde68a}
+/* ---- 全螢幕（手機／平板適配） ---- */
+.fs-btn{position:absolute;top:8px;right:8px;z-index:6;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:12px;font-weight:900;border-radius:999px;padding:6px 12px;backdrop-filter:blur(3px)}
+.fs-btn:active{background:rgba(34,211,238,.4)}
+.fs-toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;width:max-content;max-width:88%;background:rgba(0,0,0,.85);border:1px solid rgba(252,211,77,.55);color:#fde68a;font-size:13px;font-weight:700;line-height:1.55;border-radius:12px;padding:10px 14px;text-align:center}
+.battle-wrap:fullscreen{background:#07081a;overflow-y:auto;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
+.battle-wrap.fs-on .help-box{display:none}
+.battle-wrap.fs-on .touch-row{position:absolute;left:0;right:0;bottom:0;z-index:5;margin-top:0;padding:30px 10px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(3,4,12,.62));pointer-events:none}
+.battle-wrap.fs-on .tcluster{pointer-events:auto}
+.battle-wrap.fs-on .tbtn{background:rgba(10,12,28,.55)}
+@media(max-height:600px){.battle-wrap.fs-on .arena-box{width:min(100%,calc((100vh - 178px)*2.2857));margin-left:auto;margin-right:auto}}
+/* ---- 觸控按鈕（可視化：圖示＋完整招式名＋傷害標示） ---- */
+.touch-row{display:flex;gap:14px;margin-top:12px;align-items:flex-start}
+.touch-row.local-pads{flex-wrap:wrap}
+.tcluster{flex:1 1 340px;min-width:0}
+.tcluster-label{font-size:12px;font-weight:900;letter-spacing:.12em;color:var(--dim);margin-bottom:6px}
+.tcluster-body{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.tgrid-move{display:grid;grid-template-columns:repeat(3,minmax(54px,64px));gap:8px}
+.tgrid-move .mv-up{grid-column:2;grid-row:1}
+.tgrid-move .mv-left{grid-column:1;grid-row:2}
+.tgrid-move .mv-down{grid-column:2;grid-row:2}
+.tgrid-move .mv-right{grid-column:3;grid-row:2}
+.tnote{flex-basis:100%;font-size:11px;font-weight:700;color:var(--dim);line-height:1.5}
+.battle-wrap.fs-on .tnote{display:none}
+.tgrid-atk{display:grid;grid-template-columns:repeat(2,minmax(108px,1fr));gap:8px;flex:1;min-width:216px}
+.tbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:58px;padding:8px 10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.09);color:#fff;border-radius:14px;font-family:inherit;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+.tbtn .ticon{font-size:22px;line-height:1.1}
+.tbtn .tcap{font-size:11px;font-weight:700;color:#cbd5e1;white-space:nowrap}
+.tbtn .tname{font-size:14px;font-weight:900;color:#fff;line-height:1.25;text-align:center}
+.tbtn .tsub{font-size:10px;font-weight:700;color:var(--dim);white-space:nowrap}
+.tbtn.on{background:rgba(34,211,238,.38);border-color:#22d3ee}
+.tbtn.ult-t{border-color:rgba(252,211,77,.55);background:rgba(251,191,36,.16)}
+.tbtn.ult-t .tname{color:#fde68a}
+.tbtn.ult-t.ready{background:#fbbf24;border-color:#fde68a;animation:pulse 1s infinite}
+.tbtn.ult-t.ready .tname{color:#000}
+.tbtn.ult-t.ready .tsub{color:rgba(0,0,0,.6)}
+@media(pointer:coarse){.tbtn{min-height:64px}}
+@media(max-width:560px){.hud{gap:6px}.hud-face{width:28px;height:28px}.timer-box{width:46px}.timer{font-size:20px;padding:2px 6px}.hud-names{font-size:12px}.tgrid-move{grid-template-columns:repeat(3,minmax(48px,1fr))}.tgrid-atk{min-width:0}.tbtn .tname{font-size:13px}.fs-btn{font-size:11px;padding:5px 10px}}
 .help-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;line-height:1.7;color:#cbd5e1}
 .help-box .dim{color:var(--dim)}
 @media(max-width:767px){.help-box{display:none}}
