@@ -6,9 +6,9 @@ let selectedStage="neon";
 try{ const s=localStorage.getItem("neonArenaStage"); if(s==="random"||stageExists(s)) selectedStage=s; }catch(_){}
 function saveStage(){ try{ localStorage.setItem("neonArenaStage",selectedStage); }catch(_){} }
 function currentStageBg(){ return selectedStage==="random"?ARENA_BG:stageById(selectedStage).src; }
-const DIFFS=[{id:"easy",label:"簡單",desc:"新手暖身"},{id:"normal",label:"普通",desc:"勢均力敵"},{id:"hard",label:"困難",desc:"反應凌厲"}];
-function stageGridHTML(sel){ return `<div class="stage-grid">${STAGES.map(s=>`<button type="button" class="stage-card ${sel===s.id?"sel":""}" data-stage="${s.id}"><img src="${s.thumb}" alt="${s.name}場景預覽" loading="lazy"><span class="stage-name">${s.name}</span><span class="stage-desc">${s.desc}</span></button>`).join("")}<button type="button" class="stage-card random ${sel==="random"?"sel":""}" data-stage="random"><span class="stage-dice">🎲</span><span class="stage-name">隨機場景</span><span class="stage-desc">開戰時隨機抽一個，每場不一樣</span></button></div>`; }
-function stagePickerHTML(){ return `<div class="stage-pick"><div class="stage-pick-h">🗺️ 選擇場景 <span>6 個場景任選，再戰沿用；線上對戰由房主決定</span></div><div id="stagePickHost">${stageGridHTML(selectedStage)}</div></div>`; }
+const DIFFS=[{id:"easy",label:"簡單",desc:"新手暖身"},{id:"normal",label:"普通",desc:"勢均力敵"},{id:"hard",label:"困難",desc:"反應極快・連段壓制"}];
+function stageGridHTML(sel){ return `<div class="stage-grid">${STAGES.map(s=>`<button type="button" class="stage-card ${sel===s.id?"sel":""}" data-stage="${s.id}"><img src="${s.thumb}" alt="${s.name}場景預覽" loading="lazy"><span class="stage-name">${s.name}</span><span class="stage-buff">⚡ ${fighterById(s.buffFighter).name}・主場 BUFF +5%</span><span class="stage-desc">${s.desc}</span></button>`).join("")}<button type="button" class="stage-card random ${sel==="random"?"sel":""}" data-stage="random"><span class="stage-dice">🎲</span><span class="stage-name">隨機場景</span><span class="stage-desc">開戰時隨機抽一個，每場不一樣</span></button></div>`; }
+function stagePickerHTML(){ return `<div class="stage-pick"><div class="stage-pick-h">🗺️ 選擇場景 <span>6 個場景任選（順序照主場 BUFF 角色排列），再戰沿用；線上對戰由房主決定</span></div><div id="stagePickHost">${stageGridHTML(selectedStage)}</div></div>`; }
 function bindStagePicker(root){ const host=root.querySelector("#stagePickHost"); if(!host)return;
   host.querySelectorAll("[data-stage]").forEach(b=>b.addEventListener("click",()=>{ selectedStage=b.dataset.stage; saveStage(); bgm.unlock(); bgm.playSelect();
     host.querySelectorAll("[data-stage]").forEach(x=>x.classList.toggle("sel",x.dataset.stage===selectedStage));
@@ -18,15 +18,17 @@ function fighterDetail(f){ return `<div class="detail">
   <div class="detail-img"><img src="${PORTRAITS[f.id]}" alt="${f.name}・${f.title} 半身立繪"><div class="detail-shade"></div>
   <div class="detail-head"><h3>${f.name} <span style="color:${f.accent}">${f.title}</span></h3><div class="hp-box"><div>${f.maxHp}</div><small>最大生命</small></div></div></div>
   <div class="detail-body"><p>${f.desc}</p>
+  ${f.homeStage?`<p class="buff-note">⚡ 主場 BUFF：在「${stageById(f.homeStage).name}」出戰時，攻擊／防禦／速度／生命四項性能 +5%</p>`:""}
+  ${f.special?`<p class="buff-note special">✨ 特殊角色：沒有場地 BUFF；大招是特殊效果型（見招式表）</p>`:""}
   <div class="fullbody"><img class="fb-bg" src="${currentStageBg()}" alt=""><div class="fb-dim"></div><img class="fb-img" src="${BATTLE_SPRITES[f.id]}" alt="${f.name} 對戰全身造型"><span class="fb-tag">對戰全身造型・進擂台就是這個樣子</span></div>
   <div class="stats">${statBar("攻擊",f.stats.atk,"#ff4d2e")}${statBar("防禦",f.stats.def,"#22d3ee")}${statBar("速度",f.stats.spd,"#a3e635")}${statBar("生命",f.stats.hp,"#f472b6")}</div>
   <h4 class="moves-h">招式表</h4><ul class="moves">
   ${f.moves.map((m,i)=>`<li><span class="move-idx">${["一","二","三"][i]}</span><div class="move-main"><div class="move-top"><span>${m.name}</span><span class="dmg">傷害 ${m.damage}</span></div><div class="move-desc">${m.desc}</div></div></li>`).join("")}
-  <li class="ult"><span class="move-idx ult-idx">大</span><div class="move-main"><div class="move-top"><span>${f.ult.name}</span><span class="dmg">傷害 ${f.ult.damage}</span><span class="ult-tag">氣滿 100% 解放</span></div><div class="move-desc">${f.ult.desc}</div></div></li>
+  <li class="ult"><span class="move-idx ult-idx">大</span><div class="move-main"><div class="move-top"><span>${f.ult.name}</span>${f.ult.kind==="buff"?'<span class="dmg">特殊效果・不直接造成傷害</span>':`<span class="dmg">傷害 ${f.ult.damage}</span>`}<span class="ult-tag">氣滿 100% 解放</span></div><div class="move-desc">${f.ult.desc}</div></div></li>
   </ul></div></div>`; }
 function fighterCard(f,selected){ return `<button type="button" class="card ${selected?"sel":""}" data-id="${f.id}" aria-label="選擇 ${f.name} ${f.title}" style="background:linear-gradient(150deg, ${f.color}33, #12142a 55%)">
   <div class="card-img"><img src="${PORTRAITS[f.id]}" alt="${f.name}・${f.title} 半身立繪" loading="lazy"><div class="card-shade"></div>
-  <div class="card-meta"><div class="card-name">${f.name} <span style="color:${f.accent}">${f.title}</span></div><div class="card-sub"><span>生命 ${f.maxHp}</span><span>速度 ${f.stats.spd}</span><span>攻擊 ${f.stats.atk}</span></div></div>
+  <div class="card-meta"><div class="card-name">${f.name} <span style="color:${f.accent}">${f.title}</span></div><div class="card-sub"><span>生命 ${f.maxHp}</span><span>速度 ${f.stats.spd}</span><span>攻擊 ${f.stats.atk}</span>${f.special?'<span class="tag-special">✨特殊</span>':f.homeStage?`<span class="tag-buff">⚡主場 ${stageById(f.homeStage).name}</span>`:""}</div></div>
   ${selected?'<span class="picked">已選</span>':""}</div>
   <div class="card-stats">${statBar("攻擊",f.stats.atk,"#ff4d2e")}${statBar("防禦",f.stats.def,"#22d3ee")}${statBar("速度",f.stats.spd,"#a3e635")}${statBar("生命",f.stats.hp,"#f472b6")}</div></button>`; }
 function mysteryDetail(){ return `<div class="detail mystery-detail">
@@ -42,7 +44,7 @@ function showMenu(errMsg){
   appEl.innerHTML=`<div class="wrap">
   <div class="hero"><div class="hero-cards"><img class="hc left" src="${PORTRAITS.gouki}" alt=""><img class="hc right" src="${PORTRAITS.yuki}" alt=""></div>
     <p class="hero-kicker">TWO-PLAYER FIGHTING</p><h1>拳魂對決・雙人格鬥</h1>
-    <p class="hero-sub">六名格鬥家、三招一式加大招。和電腦一較高下，或開房間拿到邀請碼，邀朋友來一場真人對決。</p>
+    <p class="hero-sub">十二名格鬥家（6 位經典＋6 位特殊）、三招一式加大招，經典角色還有主場 BUFF。和電腦一較高下，或開房間拿到邀請碼，邀朋友來一場真人對決。</p>
     <div class="hero-mobile"><img src="${PORTRAITS.gouki}" alt=""><span class="vs-i">VS</span><img src="${PORTRAITS.yuki}" alt=""></div></div>
   ${errMsg?`<p class="err-banner">${errMsg}</p>`:""}
   <div class="mode-grid">
@@ -58,7 +60,7 @@ function showMenu(errMsg){
       <p class="err hidden" id="menuErr"></p></section>
   </div>
   <div id="menuStagePick">${stagePickerHTML()}</div>
-  <h2 class="gallery-h">角色圖鑑 <span>點角色看性能面板與招式表</span></h2>
+  <h2 class="gallery-h">角色圖鑑 <span>12 位格鬥家，點角色看性能面板與招式表；✨為特殊角色（無場地 BUFF、大招是特殊效果）</span></h2>
   <div class="gallery">${FIGHTERS.map(f=>`<button type="button" class="g-item ${gallerySel===f.id?"sel":""}" data-id="${f.id}"><img src="${PORTRAITS[f.id]}" alt="${f.name}・${f.title} 半身立繪" loading="lazy"><span class="g-name">${f.name}<span style="color:${f.accent}">${f.title}</span></span></button>`).join("")}</div>
   <div class="gallery-detail" id="galleryDetail">${fighterDetail(fighterById(gallerySel))}</div>
   <footer class="foot">操作：P1＝A/D 移動・W 跳躍・S 蹲下（兼格擋，大幅減傷）・F/G/H 三招・T 大招（氣滿 100%）；P2（同機）＝方向鍵移動・J/K/L 三招・I 大招｜手機會自動顯示觸控按鈕</footer></div>`;
