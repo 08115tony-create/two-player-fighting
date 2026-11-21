@@ -293,7 +293,11 @@ function startBattle(container, opts){
        攻擊×2／反彈／封印／時間停止）氣滿也會主動開（回復型血量 85% 以下才開，不浪費）；
        近身出招距離 95→135——身體碰撞最小間距是 98，舊門檻 95 讓沒有突進招的角色
        貼身時永遠進不了近身分支、幾乎不出拳，困難改 135 後貼身必定進入連打節奏。
-       簡單／普通數值不變（evade／combo 為 0、格擋距離 130、大招距離 320、近身距離 95）。 */
+       簡單／普通數值不變（evade／combo 為 0、格擋距離 130、大招距離 320、近身距離 95）。
+       大招封印（幽蘭・絕響封印）期間絕不規劃大招：封印中按大招不發動也不耗氣，
+       若 AI 氣滿時仍每輪只想放大招，就會整整 10 秒卡在「只放大招」的迴圈裡、
+       三招與移動永遠輪不到（使用者實測回報）。封印檢查只擋 ult 這一支，
+       落到下方分支後三招／移動／格擋照常規劃；封印到期自動恢復放大招。 */
     const cfg=difficulty==="easy"?{think:430,block:0.08,aggro:0.55,blockRange:130,evade:0,combo:0,ultRange:320,closeRange:95}
       :difficulty==="hard"?{think:95,block:0.8,aggro:1,blockRange:175,evade:0.4,combo:0.85,ultRange:460,closeRange:135}
       :{think:260,block:0.28,aggro:0.75,blockRange:130,evade:0,combo:0,ultRange:320,closeRange:95};
@@ -304,7 +308,7 @@ function startBattle(container, opts){
       if(cfg.combo>0&&foe.hitT>0&&adist<150&&Math.random()<cfg.combo){ const p=Math.random(); if(p<0.4)plan.a1=true; else if(p<0.72)plan.a2=true; else plan.a3=true; }
       else if(foe.atk&&adist<cfg.blockRange&&Math.random()<cfg.block){ plan.crouch=true; }
       else if(cfg.evade>0&&foe.atk&&foeMove&&(foeMove.kind==="strike"||foeMove.kind==="projectile")&&Math.random()<cfg.evade){ plan.jump=true; }
-      else if(me.energy>=100&&(adist<cfg.ultRange||me.def.ult.kind==="strike"||(me.def.ult.kind==="buff"&&(me.def.ult.effect!=="heal"||me.hp<me.def.maxHp*0.85)))){ plan.ult=true; }
+      else if(me.energy>=100&&me.ultLockUntil<=sim.time&&(adist<cfg.ultRange||me.def.ult.kind==="strike"||(me.def.ult.kind==="buff"&&(me.def.ult.effect!=="heal"||me.hp<me.def.maxHp*0.85)))){ plan.ult=true; }
       else if(adist>300){ if(dirRight)plan.right=true; else plan.left=true; const r=moves.findIndex(m=>m.kind==="projectile"||m.kind==="strike"); if(r>=0&&Math.random()<0.45*cfg.aggro){ if(r===0)plan.a1=true; else if(r===1)plan.a2=true; else plan.a3=true; } if(Math.random()<0.18)plan.jump=true; }
       else if(adist>cfg.closeRange){ if(dirRight)plan.right=true; else plan.left=true; const d=moves.findIndex(m=>m.kind==="dash"); if(d>=0&&Math.random()<0.5*cfg.aggro){ if(d===0)plan.a1=true; else if(d===1)plan.a2=true; else plan.a3=true; } if(Math.random()<0.1)plan.jump=true; }
       else { const r=Math.random(); if(r<cfg.aggro){ const p=Math.random(); if(p<0.45)plan.a1=true; else if(p<0.75)plan.a2=true; else plan.a3=true; } else if(r<cfg.aggro+0.15){ if(dirRight)plan.left=true; else plan.right=true; } else plan.crouch=Math.random()<0.5; }
@@ -535,37 +539,28 @@ function startBattle(container, opts){
   const touchRow=container.querySelector("#touchRow");
   const isTouch=("ontouchstart" in window)||navigator.maxTouchPoints>0||(typeof window.matchMedia==="function"&&window.matchMedia("(pointer: coarse)").matches);
   let touchUltBtns=[];
-  let hBtns=[]; // 十字鍵左右鍵：{ b, pos, fighter }，主迴圈依角色面向即時同步功能與標籤
   if(isTouch){
     touchRow.classList.remove("hidden");
     const tMove=(k,icon,cap,side,cls)=>`<button type="button" class="tbtn mv ${cls}" data-k="${k}" data-side="${side}" aria-label="${cap}"><span class="ticon">${icon}</span><span class="tcap">${cap}</span></button>`;
-    /* 十字鍵左右鍵：「位置固定、功能與標籤依面向對調」。按鈕釘在十字的左／右
-       位置不動（mv-left／mv-right），但它觸發的方向與標籤（圖示＋文字）跟著
-       角色面向走：面向右時左鍵＝左移、右鍵＝右移；面向左時對調——左鍵＝右移、
-       右鍵＝左移。等於十字鍵右側永遠是朝對手前進、左側永遠是後退，面向左的
-       玩家不用自己在腦中鏡像。上＝跳躍、下＝蹲下・格擋，永遠不對調。 */
-    const tH=(pos,side,fighter,facing)=>{
-      const dir=((pos==="left")===(facing===1))?"left":"right";
-      const icon=dir==="left"?"◀":"▶", cap=dir==="left"?"左移":"右移";
-      return `<button type="button" class="tbtn mv ${pos==="left"?"mv-left":"mv-right"}" data-pos="${pos}" data-dir="${dir}" data-side="${side}" data-fighter="${fighter}" aria-label="${cap}"><span class="ticon">${icon}</span><span class="tcap">${cap}</span></button>`; };
+    /* 十字鍵左右鍵：「位置、功能、標籤全部固定，絕對方向」。左位置的按鈕
+       （mv-left）永遠是向螢幕左邊移動（◀ 左移、data-k="left"），右位置的按鈕
+       （mv-right）永遠是向螢幕右邊移動（▶ 右移、data-k="right"）——不論角色
+       面向哪邊、是否跳過對手換位，都不對調、不跟著面向翻轉。使用者明確要求：
+       右移就在右邊、左移就在左邊，任何情況都一樣。上＝跳躍、下＝蹲下・格擋
+       同樣固定。左右鍵與其他按鈕一樣走 data-k 通用綁定（input.left/right 是
+       螢幕絕對方向，updateFighter 直接以 x 位移套用，本來就不依 facing 換算）。 */
+    const tH=(pos,side)=>{
+      const dir=pos, icon=dir==="left"?"◀":"▶", cap=dir==="left"?"左移":"右移";
+      return `<button type="button" class="tbtn mv ${pos==="left"?"mv-left":"mv-right"}" data-k="${dir}" data-side="${side}" aria-label="${cap}"><span class="ticon">${icon}</span><span class="tcap">${cap}</span></button>`; };
     const tAtk=(m,k,side)=>`<button type="button" class="tbtn atk" data-k="${k}" data-side="${side}" aria-label="招式 ${m.name}"><span class="tname">${m.name}</span><span class="tsub">傷害 ${m.damage}</span></button>`;
     const tUlt=(def,side)=>`<button type="button" class="tbtn atk ult-t" data-k="ult" data-side="${side}" data-ult-touch="${side}" aria-label="大招 ${def.ult.name}"><span class="tname">⚡大招 ${def.ult.name}</span><span class="tsub">${def.ult.kind==="buff"?"特殊效果":"傷害 "+def.ult.damage}・氣滿 100%</span></button>`;
-    const cluster=(def,side,fighter,label)=>{ const f0=fighter===0?1:-1;
-      return `<div class="tcluster"><div class="tcluster-label">${label}</div><div class="tcluster-body"><div class="tgrid-move">${tMove("jump","⬆","跳躍",side,"mv-up")}${tH("left",side,fighter,f0)}${tMove("crouch","⬇","蹲下・格擋",side,"mv-down")}${tH("right",side,fighter,f0)}</div><div class="tgrid-atk">${def.moves.map((m,i)=>tAtk(m,["a1","a2","a3"][i],side)).join("")}${tUlt(def,side)}</div></div></div>`; };
-    const tnote=`<div class="tnote">十字鍵：上＝跳躍、下＝蹲下・格擋；左右依角色面向自動對調（面向左時左右功能與標籤互換，位置不變）</div>`;
-    if(opponent==="local"){ touchRow.classList.add("local-pads"); touchRow.innerHTML=cluster(defs[0],0,0,"🎮 P1 操作・"+defs[0].name)+cluster(defs[1],1,1,"🎮 P2 操作・"+defs[1].name)+tnote; }
-    else touchRow.innerHTML=cluster(myDef,0,playerSide,"📱 觸控操作・"+myDef.name)+tnote;
+    const cluster=(def,side,label)=>{
+      return `<div class="tcluster"><div class="tcluster-label">${label}</div><div class="tcluster-body"><div class="tgrid-move">${tMove("jump","⬆","跳躍",side,"mv-up")}${tH("left",side)}${tMove("crouch","⬇","蹲下・格擋",side,"mv-down")}${tH("right",side)}</div><div class="tgrid-atk">${def.moves.map((m,i)=>tAtk(m,["a1","a2","a3"][i],side)).join("")}${tUlt(def,side)}</div></div></div>`; };
+    const tnote=`<div class="tnote">十字鍵：上＝跳躍、下＝蹲下・格擋、左＝左移、右＝右移（位置與方向固定，不隨角色面向改變）</div>`;
+    if(opponent==="local"){ touchRow.classList.add("local-pads"); touchRow.innerHTML=cluster(defs[0],0,"🎮 P1 操作・"+defs[0].name)+cluster(defs[1],1,"🎮 P2 操作・"+defs[1].name)+tnote; }
+    else touchRow.innerHTML=cluster(myDef,0,"📱 觸控操作・"+myDef.name)+tnote;
     touchRow.querySelectorAll(".tbtn").forEach(b=>{ const tgt=(+b.dataset.side)===1?touch2:touch;
       const capPtr=e=>{ if(e.pointerId!=null&&b.setPointerCapture){ try{ b.setPointerCapture(e.pointerId); }catch(_){}} };
-      if(b.dataset.pos){ /* 左右鍵：按下當下依 dataset.dir（已與面向同步）決定方向並存起來，放開時清同一個，面向中途翻轉也不會卡鍵 */
-        const on=e=>{ e.preventDefault(); const dir=b.dataset.dir==="right"?"right":"left"; b._eff=dir; tgt[dir]=true; b.classList.add("on"); capPtr(e); };
-        const off=()=>{ if(b._eff){ tgt[b._eff]=false; b._eff=null; } b.classList.remove("on"); };
-        b.addEventListener("pointerdown",on);
-        ["pointerup","pointercancel","lostpointercapture","pointerleave"].forEach(ev=>b.addEventListener(ev,off));
-        b.addEventListener("contextmenu",e=>e.preventDefault());
-        hBtns.push({ b, pos:b.dataset.pos, fighter:+b.dataset.fighter });
-        return;
-      }
       const k=b.dataset.k;
       const on=e=>{ e.preventDefault(); tgt[k]=true; b.classList.add("on"); capPtr(e); };
       const off=()=>{ tgt[k]=false; b.classList.remove("on"); };
@@ -587,22 +582,38 @@ function startBattle(container, opts){
      還是瀏覽器分頁，所以不會全螢幕。本版補上 manifest.webmanifest（display:fullscreen）
      ＋圖示＋service worker 後，新加的主畫面捷徑會以 standalone/fullscreen 模式開啟；
      這裡偵測到該模式就直接套用和全螢幕相同的浮動按鍵版面（.pwa-on）、隱藏站內頂欄
-     並把對戰區撐滿視口。舊捷徑不會自動升級，必須刪掉舊捷徑重新加一次。 */
+     並把對戰區撐滿視口。舊捷徑不會自動升級，必須刪掉舊捷徑重新加一次。
+     注意：先前「加到主畫面還是沒全螢幕」的真正根源是部署時最後覆蓋的 og 修正版
+     index.html 是舊版基底，裡面沒有 manifest 連結／apple-touch-icon／service worker
+     註冊——本版已把 og 標籤直接合併進壓縮包的 index.html，不需要再覆蓋任何別版
+     index.html，部署後 manifest 才會真正被讀到。 */
   const isStandalone=(()=>{ try{ if(window.navigator&&window.navigator.standalone===true)return true; if(typeof window.matchMedia==="function")return window.matchMedia("(display-mode: standalone)").matches||window.matchMedia("(display-mode: fullscreen)").matches; }catch(_){} return false; })();
   if(isStandalone){ wrapEl.classList.add("pwa-on"); document.documentElement.classList.add("standalone","battle-live"); }
-  function syncFsUI(){ const on=!!document.fullscreenElement; wrapEl.classList.toggle("fs-on",on); if(fsBtn) fsBtn.textContent=on?"✕ 退出全螢幕":"⛶ 全螢幕"; }
+  /* 假全螢幕後備：真 Fullscreen API 不可用或被瀏覽器拒絕時，不再只跳提示文字，
+     而是直接套用與主畫面 App 模式相同的全螢幕版面（.pwa-on 按鍵浮動＋隱藏頂欄
+     ＋對戰撐滿視口），讓使用者按下去一定有全螢幕效果；再按一次按鈕可退出。 */
+  let fakeFs=false;
+  function applyFakeFs(){ fakeFs=true; wrapEl.classList.add("pwa-on"); document.documentElement.classList.add("battle-live","fs-fake"); if(fsBtn) fsBtn.textContent="✕ 退出全螢幕"; }
+  function clearFakeFs(){ fakeFs=false; document.documentElement.classList.remove("fs-fake"); if(!isStandalone){ wrapEl.classList.remove("pwa-on"); document.documentElement.classList.remove("battle-live"); } if(fsBtn) fsBtn.textContent="⛶ 全螢幕"; }
+  function syncFsUI(){ const on=!!document.fullscreenElement; wrapEl.classList.toggle("fs-on",on); if(fsBtn&&!fakeFs) fsBtn.textContent=on?"✕ 退出全螢幕":"⛶ 全螢幕"; }
   function onFsChange(){ syncFsUI(); }
+  function lockLandscape(){ if(screen.orientation&&screen.orientation.lock){ try{ const lp=screen.orientation.lock("landscape"); if(lp&&lp.catch)lp.catch(()=>{}); }catch(_){} } }
   if(fsBtn){
     fsBtn.addEventListener("click",()=>{
       try{
         if(document.fullscreenElement){ document.exitFullscreen(); return; }
-        const reqEl=wrapEl.requestFullscreen?wrapEl:(document.documentElement&&document.documentElement.requestFullscreen?document.documentElement:null);
-        if(!reqEl){ if(isStandalone){ wrapEl.classList.add("pwa-on"); showFsToast("目前已是主畫面 App 模式：對戰已套用全螢幕版面（按鍵浮動、頂欄隱藏），請將裝置橫放遊玩"); } else showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩（舊捷徑請先刪除再重新加入）"); return; }
-        let p=null;
-        try{ p=reqEl.requestFullscreen({navigationUI:"hide"}); }catch(_){ p=reqEl.requestFullscreen(); }
-        if(p&&p.catch)p.catch(()=>{ try{ const p2=reqEl.requestFullscreen(); if(p2&&p2.catch)p2.catch(()=>showFsToast(isStandalone?"目前已是主畫面 App 模式，對戰已套用全螢幕版面":"無法進入全螢幕，請將裝置橫放後再試一次")); }catch(_){ showFsToast("無法進入全螢幕，請將裝置橫放後再試一次"); } });
-        if(screen.orientation&&screen.orientation.lock){ try{ const lp=screen.orientation.lock("landscape"); if(lp&&lp.catch)lp.catch(()=>{}); }catch(_){} }
-      }catch(_){ showFsToast(isStandalone?"目前已是主畫面 App 模式，對戰已套用全螢幕版面":"此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); }
+        if(fakeFs){ clearFakeFs(); return; }
+        if(isStandalone){ wrapEl.classList.add("pwa-on"); showFsToast("目前已是主畫面 App 模式：對戰已套用全螢幕版面（按鍵浮動、頂欄隱藏），請將裝置橫放遊玩"); return; }
+        const docEl=document.documentElement;
+        if(!wrapEl.requestFullscreen&&!(docEl&&docEl.requestFullscreen)){ applyFakeFs(); showFsToast("此瀏覽器不支援網頁全螢幕 API，已改用全螢幕版面（按鍵浮動、頂欄隱藏）；也可刪除舊捷徑後重新「加到主畫面」以 App 模式開啟"); return; }
+        const tryEl=(el,opts)=>{ try{ const p=opts?el.requestFullscreen(opts):el.requestFullscreen(); return (p&&p.catch)?p.then(()=>true).catch(()=>false):Promise.resolve(true); }catch(_){ return Promise.resolve(false); } };
+        (async()=>{ let okFs=false;
+          if(wrapEl.requestFullscreen){ okFs=await tryEl(wrapEl,{navigationUI:"hide"}); if(!okFs) okFs=await tryEl(wrapEl); }
+          if(!okFs&&docEl&&docEl.requestFullscreen){ okFs=await tryEl(docEl,{navigationUI:"hide"}); if(!okFs) okFs=await tryEl(docEl); }
+          if(okFs) lockLandscape();
+          else { applyFakeFs(); showFsToast("瀏覽器拒絕進入全螢幕，已改用全螢幕版面（按鍵浮動、頂欄隱藏），請將裝置橫放遊玩"); }
+        })();
+      }catch(_){ applyFakeFs(); showFsToast("無法進入全螢幕，已改用全螢幕版面（按鍵浮動、頂欄隱藏），請將裝置橫放遊玩"); }
     });
     document.addEventListener("fullscreenchange",onFsChange);
     syncFsUI();
@@ -683,10 +694,8 @@ function startBattle(container, opts){
       }
       for(const c of ultChips) c.classList.toggle("ready",((+c.dataset.ultSide)===0?f0.energy:f1.energy)>=100);
       for(const b of touchUltBtns) b.classList.toggle("ready",((+b.dataset.ultTouch)===0?f0.energy:f1.energy)>=100);
-      /* 十字鍵左右鍵標籤同步：角色面向翻轉（如跳過對手換位）時，左右鍵的
-         功能方向（dataset.dir）與標籤（圖示＋文字）跟著對調，位置不變。 */
-      for(const h of hBtns){ const ff=sim.fighters[h.fighter]; if(!ff)continue; const dir=((h.pos==="left")===(ff.facing===1))?"left":"right";
-        if(h.b.dataset.dir!==dir){ h.b.dataset.dir=dir; const ic=h.b.querySelector(".ticon"), cp=h.b.querySelector(".tcap"); if(ic)ic.textContent=dir==="left"?"◀":"▶"; if(cp)cp.textContent=dir==="left"?"左移":"右移"; h.b.setAttribute("aria-label",dir==="left"?"左移":"右移"); } }
+      /* 十字鍵左右鍵是絕對方向（左鍵永遠左移、右鍵永遠右移），不隨角色面向
+         翻轉做任何同步或對調——此處刻意不做面向同步，使用者要求任何情況不變。 */
     }
   };
   raf=requestAnimationFrame(loop);
@@ -733,7 +742,7 @@ function startBattle(container, opts){
       case "ArrowUp": keys.jump=false; keys2.jump=false; break; case "ArrowDown": keys.crouch=false; keys2.crouch=false; break;
       case "KeyJ": keys2.a1=false; break; case "KeyK": keys2.a2=false; break; case "KeyL": keys2.a3=false; break; case "KeyI": keys2.ult=false; break; } };
   window.addEventListener("keydown",down); window.addEventListener("keyup",up);
-  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); document.removeEventListener("fullscreenchange",onFsChange); document.documentElement.classList.remove("battle-live"); clearTimeout(fsToastTimer); if(document.fullscreenElement&&wrapEl&&document.fullscreenElement===wrapEl){ try{ document.exitFullscreen(); }catch(_){}} if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
+  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); document.removeEventListener("fullscreenchange",onFsChange); document.documentElement.classList.remove("battle-live","fs-fake"); clearTimeout(fsToastTimer); if(document.fullscreenElement&&wrapEl&&document.fullscreenElement===wrapEl){ try{ document.exitFullscreen(); }catch(_){}} if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
   bgm.setMode("battle");
   return { destroy };
 }

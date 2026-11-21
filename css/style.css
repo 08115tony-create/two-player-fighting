@@ -204,6 +204,9 @@ button{font-family:inherit;cursor:pointer}
 .battle-wrap.pwa-on{min-height:100dvh}
 html.standalone.battle-live .topbar{display:none}
 html.standalone.battle-live .wrap{padding:0 8px 16px}
+/* ---- 假全螢幕後備（Fullscreen API 不可用／被拒絕時由 battle.js 加 .fs-fake）：與主畫面 App 模式同樣隱藏頂欄、對戰撐滿 ---- */
+html.fs-fake.battle-live .topbar{display:none}
+html.fs-fake.battle-live .wrap{padding:0 8px 16px}
 /* ---- 觸控按鈕（可視化：圖示＋完整招式名＋傷害標示） ---- */
 .touch-row{display:flex;gap:14px;margin-top:12px;align-items:flex-start;flex-wrap:wrap}
 .touch-row.local-pads{flex-wrap:wrap}
