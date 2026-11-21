@@ -195,25 +195,29 @@ button{font-family:inherit;cursor:pointer}
 .fs-btn:active{background:rgba(34,211,238,.4)}
 .fs-toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;width:max-content;max-width:88%;background:rgba(0,0,0,.85);border:1px solid rgba(252,211,77,.55);color:#fde68a;font-size:13px;font-weight:700;line-height:1.55;border-radius:12px;padding:10px 14px;text-align:center}
 .battle-wrap:fullscreen{background:#07081a;overflow-y:auto;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
-.battle-wrap.fs-on .help-box{display:none}
-.battle-wrap.fs-on .touch-row{position:absolute;left:0;right:0;bottom:0;z-index:5;margin-top:0;padding:30px 10px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(3,4,12,.62));pointer-events:none}
-.battle-wrap.fs-on .tcluster{pointer-events:auto}
-.battle-wrap.fs-on .tbtn{background:rgba(10,12,28,.55)}
-@media(max-height:600px){.battle-wrap.fs-on .arena-box{width:min(100%,calc((100vh - 178px)*2.2857));margin-left:auto;margin-right:auto}}
+.battle-wrap.fs-on .help-box,.battle-wrap.pwa-on .help-box{display:none}
+.battle-wrap.fs-on .touch-row,.battle-wrap.pwa-on .touch-row{position:absolute;left:0;right:0;bottom:0;z-index:5;margin-top:0;padding:30px 10px calc(8px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(3,4,12,.62));pointer-events:none}
+.battle-wrap.fs-on .tcluster,.battle-wrap.pwa-on .tcluster{pointer-events:auto}
+.battle-wrap.fs-on .tbtn,.battle-wrap.pwa-on .tbtn{background:rgba(10,12,28,.55)}
+@media(max-height:600px){.battle-wrap.fs-on .arena-box,.battle-wrap.pwa-on .arena-box{width:min(100%,calc((100vh - 178px)*2.2857));margin-left:auto;margin-right:auto}}
+/* ---- 主畫面 App（standalone）模式：從主畫面開啟時對戰中隱藏站內頂欄、對戰區撐滿整個視口，等同全螢幕 ---- */
+.battle-wrap.pwa-on{min-height:100dvh}
+html.standalone.battle-live .topbar{display:none}
+html.standalone.battle-live .wrap{padding:0 8px 16px}
 /* ---- 觸控按鈕（可視化：圖示＋完整招式名＋傷害標示） ---- */
-.touch-row{display:flex;gap:14px;margin-top:12px;align-items:flex-start}
+.touch-row{display:flex;gap:14px;margin-top:12px;align-items:flex-start;flex-wrap:wrap}
 .touch-row.local-pads{flex-wrap:wrap}
 .tcluster{flex:1 1 340px;min-width:0}
 .tcluster-label{font-size:12px;font-weight:900;letter-spacing:.12em;color:var(--dim);margin-bottom:6px}
-.tcluster-body{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.tcluster-body{display:flex;gap:12px;align-items:flex-start;flex-wrap:nowrap}
 .tgrid-move{display:grid;grid-template-columns:repeat(3,minmax(54px,64px));gap:8px}
 .tgrid-move .mv-up{grid-column:2;grid-row:1}
 .tgrid-move .mv-left{grid-column:1;grid-row:2}
 .tgrid-move .mv-down{grid-column:2;grid-row:2}
 .tgrid-move .mv-right{grid-column:3;grid-row:2}
 .tnote{flex-basis:100%;font-size:11px;font-weight:700;color:var(--dim);line-height:1.5}
-.battle-wrap.fs-on .tnote{display:none}
-.tgrid-atk{display:grid;grid-template-columns:repeat(2,minmax(108px,1fr));gap:8px;flex:1;min-width:216px}
+.battle-wrap.fs-on .tnote,.battle-wrap.pwa-on .tnote{display:none}
+.tgrid-atk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;flex:1;min-width:0}
 .tbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:58px;padding:8px 10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.09);color:#fff;border-radius:14px;font-family:inherit;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
 .tbtn .ticon{font-size:22px;line-height:1.1}
 .tbtn .tcap{font-size:11px;font-weight:700;color:#cbd5e1;white-space:nowrap}
@@ -227,6 +231,9 @@ button{font-family:inherit;cursor:pointer}
 .tbtn.ult-t.ready .tsub{color:rgba(0,0,0,.6)}
 @media(pointer:coarse){.tbtn{min-height:64px}}
 @media(max-width:560px){.hud{gap:6px}.hud-face{width:28px;height:28px}.timer-box{width:46px}.timer{font-size:20px;padding:2px 6px}.hud-names{font-size:12px}.tgrid-move{grid-template-columns:repeat(3,minmax(48px,1fr))}.tgrid-atk{min-width:0}.tbtn .tname{font-size:13px}.fs-btn{font-size:11px;padding:5px 10px}}
+/* ---- 手機直向／窄屏：招式固定在右手側（十字鍵在左、招式在右，左右並排，絕不掉到移動鍵下方） ---- */
+@media(max-width:700px){.touch-row{gap:8px}.tcluster{flex-basis:100%}.tcluster-body{gap:8px;flex-wrap:nowrap}.tgrid-move{grid-template-columns:repeat(3,46px);gap:6px;flex:none}.tgrid-atk{gap:6px}.tbtn{min-height:52px;padding:6px 4px;border-radius:12px}.tbtn .ticon{font-size:19px}.tbtn .tcap{font-size:10px;white-space:normal;text-align:center;line-height:1.25}.tbtn .tname{font-size:12px;white-space:normal;word-break:break-all}.tbtn .tsub{font-size:9px;white-space:normal;text-align:center}}
+@media(max-width:380px){.tgrid-move{grid-template-columns:repeat(3,40px)}.tbtn .tname{font-size:11px}}
 .help-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;line-height:1.7;color:#cbd5e1}
 .help-box .dim{color:var(--dim)}
 @media(max-width:767px){.help-box{display:none}}

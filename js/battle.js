@@ -583,18 +583,26 @@ function startBattle(container, opts){
   const fsToast=container.querySelector("#fsToast");
   let fsToastTimer=0;
   function showFsToast(msg){ if(!fsToast)return; fsToast.textContent=msg; fsToast.classList.remove("hidden"); clearTimeout(fsToastTimer); fsToastTimer=setTimeout(()=>fsToast.classList.add("hidden"),3000); }
+  /* 主畫面 App 模式偵測：先前版本沒有 manifest，「加到主畫面」只是普通捷徑、開起來
+     還是瀏覽器分頁，所以不會全螢幕。本版補上 manifest.webmanifest（display:fullscreen）
+     ＋圖示＋service worker 後，新加的主畫面捷徑會以 standalone/fullscreen 模式開啟；
+     這裡偵測到該模式就直接套用和全螢幕相同的浮動按鍵版面（.pwa-on）、隱藏站內頂欄
+     並把對戰區撐滿視口。舊捷徑不會自動升級，必須刪掉舊捷徑重新加一次。 */
+  const isStandalone=(()=>{ try{ if(window.navigator&&window.navigator.standalone===true)return true; if(typeof window.matchMedia==="function")return window.matchMedia("(display-mode: standalone)").matches||window.matchMedia("(display-mode: fullscreen)").matches; }catch(_){} return false; })();
+  if(isStandalone){ wrapEl.classList.add("pwa-on"); document.documentElement.classList.add("standalone","battle-live"); }
   function syncFsUI(){ const on=!!document.fullscreenElement; wrapEl.classList.toggle("fs-on",on); if(fsBtn) fsBtn.textContent=on?"✕ 退出全螢幕":"⛶ 全螢幕"; }
   function onFsChange(){ syncFsUI(); }
   if(fsBtn){
     fsBtn.addEventListener("click",()=>{
       try{
         if(document.fullscreenElement){ document.exitFullscreen(); return; }
-        if(!wrapEl.requestFullscreen){ showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); return; }
+        const reqEl=wrapEl.requestFullscreen?wrapEl:(document.documentElement&&document.documentElement.requestFullscreen?document.documentElement:null);
+        if(!reqEl){ if(isStandalone){ wrapEl.classList.add("pwa-on"); showFsToast("目前已是主畫面 App 模式：對戰已套用全螢幕版面（按鍵浮動、頂欄隱藏），請將裝置橫放遊玩"); } else showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩（舊捷徑請先刪除再重新加入）"); return; }
         let p=null;
-        try{ p=wrapEl.requestFullscreen({navigationUI:"hide"}); }catch(_){ p=wrapEl.requestFullscreen(); }
-        if(p&&p.catch)p.catch(()=>{ try{ const p2=wrapEl.requestFullscreen(); if(p2&&p2.catch)p2.catch(()=>showFsToast("無法進入全螢幕，請將裝置橫放後再試一次")); }catch(_){ showFsToast("無法進入全螢幕，請將裝置橫放後再試一次"); } });
+        try{ p=reqEl.requestFullscreen({navigationUI:"hide"}); }catch(_){ p=reqEl.requestFullscreen(); }
+        if(p&&p.catch)p.catch(()=>{ try{ const p2=reqEl.requestFullscreen(); if(p2&&p2.catch)p2.catch(()=>showFsToast(isStandalone?"目前已是主畫面 App 模式，對戰已套用全螢幕版面":"無法進入全螢幕，請將裝置橫放後再試一次")); }catch(_){ showFsToast("無法進入全螢幕，請將裝置橫放後再試一次"); } });
         if(screen.orientation&&screen.orientation.lock){ try{ const lp=screen.orientation.lock("landscape"); if(lp&&lp.catch)lp.catch(()=>{}); }catch(_){} }
-      }catch(_){ showFsToast("此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); }
+      }catch(_){ showFsToast(isStandalone?"目前已是主畫面 App 模式，對戰已套用全螢幕版面":"此裝置／瀏覽器不支援網頁全螢幕：請將裝置橫放，或用瀏覽器選單「加到主畫面」再開啟遊玩"); }
     });
     document.addEventListener("fullscreenchange",onFsChange);
     syncFsUI();
@@ -725,7 +733,7 @@ function startBattle(container, opts){
       case "ArrowUp": keys.jump=false; keys2.jump=false; break; case "ArrowDown": keys.crouch=false; keys2.crouch=false; break;
       case "KeyJ": keys2.a1=false; break; case "KeyK": keys2.a2=false; break; case "KeyL": keys2.a3=false; break; case "KeyI": keys2.ult=false; break; } };
   window.addEventListener("keydown",down); window.addEventListener("keyup",up);
-  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); document.removeEventListener("fullscreenchange",onFsChange); clearTimeout(fsToastTimer); if(document.fullscreenElement&&wrapEl&&document.fullscreenElement===wrapEl){ try{ document.exitFullscreen(); }catch(_){}} if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
+  function destroy(){ destroyed=true; endUltCinematic(); cancelAnimationFrame(raf); if(syncTimer)clearInterval(syncTimer); window.removeEventListener("keydown",down); window.removeEventListener("keyup",up); document.removeEventListener("fullscreenchange",onFsChange); document.documentElement.classList.remove("battle-live"); clearTimeout(fsToastTimer); if(document.fullscreenElement&&wrapEl&&document.fullscreenElement===wrapEl){ try{ document.exitFullscreen(); }catch(_){}} if(online){ Net.onMessage=null; Net.onPeerLeft=null; } }
   bgm.setMode("battle");
   return { destroy };
 }
