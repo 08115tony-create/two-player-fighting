@@ -32,7 +32,7 @@ function poseFor(f){ if(f.ko)return "ko"; if(f.frozen)return "idle"; if(f.hitT>4
   return "idle"; }
 
 function startBattle(container, opts){
-  const { p1Char, p2Char, opponent, difficulty, onExit, stageId } = opts;
+  const { p1Char, p2Char, opponent, difficulty, onExit, onReturnToLobby, stageId } = opts;
   /* 場景：呼叫端可傳具體 id 或 "random"（在這裡抽定）；線上由房主在 start 訊息決定，
      雙方傳入同一個 id。再戰（resetFight）不換場景，沿用這一場的 stage。 */
   const stage = stageById(resolveStageId(stageId));
@@ -93,6 +93,9 @@ function startBattle(container, opts){
   let effectSeen=new Set(); // 線上特殊大招效果（時間停止／大招封印）以 atkSeq 去重，只套用一次
   let hitAckSeen=new Set(); // 線上氣量：防守方回傳的命中確認（hitack）以 atkSeq 去重，攻擊方每招只加一次氣
   let phase="intro", winnerIdx=null, rematchMine=false, rematchTheirs=false, declared=false, oppLeft=false;
+  /* endTie：這一場以「計時歸零且雙方血量完全相同」收尾——勝負判定照舊（WIN/LOSE 不變），
+     但選場地權規則視為無輸家，回房間後維持房主選場地。lobbyReturning 防回房間重複觸發。 */
+  let endTie=false, lobbyReturning=false;
   /* 大招演出（cinematic）：招名 + 人物特寫 + 時間暫緩。
      觸發來源必須是「已複製的權威狀態」：本地／CPU／同機由 startAttack 觸發，
      線上遠端由快照裡的 atk==="ult" + atkSeq 觸發，兩端因此會為同一次大招各播一次。
@@ -133,7 +136,7 @@ function startBattle(container, opts){
     hitProcessed=new Set(); remoteAtkSeen=new Map(); effectSeen=new Set(); hitAckSeen=new Set();
     cpu={nextThink:0,plan:emptyInput(),planUntil:0}; // 再戰重置 CPU 排程，避免對手不動
     Object.assign(keys,emptyInput()); Object.assign(keys2,emptyInput()); Object.assign(touch,emptyInput()); Object.assign(touch2,emptyInput());
-    phase="intro"; winnerIdx=null; declared=false; rematchMine=false; rematchTheirs=false;
+    phase="intro"; winnerIdx=null; declared=false; rematchMine=false; rematchTheirs=false; endTie=false;
     container.querySelector("#introOverlay").classList.remove("hidden");
     container.querySelector("#overOverlay").classList.add("hidden");
     container.querySelector("#introText").textContent="READY";
@@ -457,15 +460,44 @@ function startBattle(container, opts){
           ? `<div class="verdict win" id="verdictText">WIN</div><p class="verdict-sub win">🏆 你打贏了！</p>`
           : `<div class="verdict lose" id="verdictText">LOSE</div><p class="verdict-sub lose">你被擊敗了…再接再厲！</p>`)
       : "";
-    ov.innerHTML=`<div class="over-inner">${verdictHtml}<div class="ko">K.O.</div><img class="winner-img" src="${PORTRAITS[w.id]}" style="--ring:${w.color}" alt=""><p class="winner-text"><b style="color:${w.accent}">${w.name}・${w.title}</b> 獲勝！${winnerIdx===playerSide?" 🎉":""}</p><p class="over-stage">🗺️ 場景：${stage.name}（再戰沿用此場景，換場景請回主選單）</p><p class="rematch-note hidden" id="rematchNote">已送出再戰邀請，等待對手同意…</p><div class="over-btns" id="overBtns"><button class="btn-primary" id="rematchBtn">再戰一場</button><button class="btn-ghost" id="overExit">回主選單</button></div></div>`;
+    const overStageText = online
+      ? `🗺️ 場景：${stage.name}（再戰沿用此場景；回線上房間可換角色／場地，下一場場地由上一局輸家選）`
+      : `🗺️ 場景：${stage.name}（再戰沿用此場景，換場景請回主選單）`;
+    ov.innerHTML=`<div class="over-inner">${verdictHtml}<div class="ko">K.O.</div><img class="winner-img" src="${PORTRAITS[w.id]}" style="--ring:${w.color}" alt=""><p class="winner-text"><b style="color:${w.accent}">${w.name}・${w.title}</b> 獲勝！${winnerIdx===playerSide?" 🎉":""}</p><p class="over-stage">${overStageText}</p><p class="rematch-note hidden" id="rematchNote">已送出再戰邀請，等待對手同意…</p><div class="over-btns" id="overBtns"><button class="btn-primary" id="rematchBtn">再戰一場</button>${online?`<button class="btn-cyan" id="lobbyBtn">🏠 回線上房間・換角色／場地</button>`:""}<button class="btn-ghost" id="overExit">回主選單</button></div></div>`;
     ov.classList.remove("hidden");
     ov.querySelector("#rematchBtn").addEventListener("click",()=>{
       if(online){ rematchMine=true; Net.send({t:"rematch"}); ov.querySelector("#rematchNote").classList.remove("hidden"); ov.querySelector("#overBtns").classList.add("hidden"); if(rematchTheirs) resetFight(); }
       else resetFight();
     });
+    const lobbyBtnEl=ov.querySelector("#lobbyBtn"); if(lobbyBtnEl) lobbyBtnEl.addEventListener("click",exitToLobby);
     ov.querySelector("#overExit").addEventListener("click",exitBattle);
   }
   function exitBattle(){ if(online) Net.send({t:"bye"}); destroy(); onExit(); }
+  /* 賽後回線上房間（只有線上模式有這顆按鈕）：連線不拆——不送 bye、不呼叫
+     Net.destroy()，同一個房間、同一個對手、免重輸邀請碼。流程：
+     本地先套用回房間狀態（準備歸零＋下一場場地由上一局輸家選，平手則房主選），
+     再送 tolobby 通知對方一起回大廳（對方連線層收到時會套用同一份狀態，
+     輸家以這則訊息帶的為準，兩邊一致），最後切回大廳畫面換角色／場地。 */
+  function exitToLobby(){
+    if(lobbyReturning) return; lobbyReturning=true;
+    if(online){
+      const loserSide = endTie ? null : ((winnerIdx===0||winnerIdx===1) ? (winnerIdx===0?1:0) : null);
+      try{ if(typeof Net.applyReturnState==="function") Net.applyReturnState(loserSide, stage.id); }catch(_){}
+      Net.send({t:"tolobby", loser:loserSide, winner:(winnerIdx===0||winnerIdx===1)?winnerIdx:null, stage:stage.id, tie:!!endTie});
+      try{ Net.sendLobby(); }catch(_){}
+    }
+    destroy();
+    if(onReturnToLobby) onReturnToLobby(); else onExit();
+  }
+  /* 收到對方的回房間通知：Net 連線層已先套用 applyReturnState，這裡只需把自己
+     的大廳狀態同步出去（讓對方看到我的準備已歸零、以及我若是選場地一方時的場地），
+     再切回大廳。不回送 tolobby，避免兩邊互相觸發迴圈。 */
+  function handleTolobbyFromPeer(){
+    if(lobbyReturning) return; lobbyReturning=true;
+    try{ Net.sendLobby(); }catch(_){}
+    destroy();
+    if(onReturnToLobby) onReturnToLobby(); else onExit();
+  }
 
   // ---------- drawing ----------
   function drawFighter(ctx,f,time){
@@ -656,7 +688,7 @@ function startBattle(container, opts){
       const it=container.querySelector("#introText"); const txt=sim.introT<600?"READY":sim.introT<1200?"SET":"FIGHT!"; if(it&&it.textContent!==txt)it.textContent=txt;
       if(sim.introT>=1500){ sim.phase="fight"; phase="fight"; container.querySelector("#introOverlay").classList.add("hidden"); }
     } else if(sim.phase==="fight"){ sim.timer-=dt/1000;
-      if(sim.timer<=0){ sim.timer=0; const [f0,f1]=sim.fighters; const r0=f0.hp/f0.def.maxHp, r1=f1.hp/f1.def.maxHp; sim.winner=r0===r1?(f0.hp>=f1.hp?0:1):r0>r1?0:1; sim.fighters[sim.winner===0?1:0].ko=true; sim.overT=0; }
+      if(sim.timer<=0){ sim.timer=0; const [f0,f1]=sim.fighters; const r0=f0.hp/f0.def.maxHp, r1=f1.hp/f1.def.maxHp; endTie=(r0===r1 && f0.hp===f1.hp); sim.winner=r0===r1?(f0.hp>=f1.hp?0:1):r0>r1?0:1; sim.fighters[sim.winner===0?1:0].ko=true; sim.overT=0; }
     }
     const localIn={ left:keys.left||touch.left, right:keys.right||touch.right, jump:keys.jump||touch.jump, crouch:keys.crouch||touch.crouch, a1:keys.a1||touch.a1, a2:keys.a2||touch.a2, a3:keys.a3||touch.a3, ult:keys.ult||touch.ult };
     if(opponent==="online"){ updateFighter(playerSide,localIn,dt); applyRemote(dt, realDt); }
@@ -682,7 +714,7 @@ function startBattle(container, opts){
     sim.shake=Math.max(0,sim.shake-dt*0.03); sim.flash=Math.max(0,sim.flash-dt*0.0012);
     if(sim.winner!==null&&sim.phase==="fight"){ sim.overT+=dt;
       if(sim.overT>1000){ sim.phase="over"; phase="over"; bgm.playKo(); winnerIdx=sim.winner; showOver();
-        if(online&&!declared){ declared=true; Net.send({t:"winner",winner:sim.winner===0?"host":"guest"}); } } }
+        if(online&&!declared){ declared=true; Net.send({t:"winner",winner:sim.winner===0?"host":"guest",tie:!!endTie}); } } }
     draw();
     if(now-hudAt>90){ hudAt=now; const [f0,f1]=sim.fighters;
       hpEls[0].style.width=Math.max(0,f0.hp/f0.def.maxHp*100)+"%"; hpEls[0].style.background=hpColor(f0.hp/f0.def.maxHp);
@@ -720,7 +752,8 @@ function startBattle(container, opts){
       else if(msg.t==="hitack"){ handleHitAck(msg); }
       else if(msg.t==="effect"){ handleEffect(msg); }
       else if(msg.t==="reflectdmg"){ if(sim&&typeof msg.dmg==="number"&&msg.dmg>0) applyRawDamage(sim.fighters[playerSide], msg.dmg); }
-      else if(msg.t==="winner"){ const wIdx=msg.winner==="host"?0:1; if(sim&&sim.phase!=="over"){ sim.winner=wIdx; sim.phase="over"; phase="over"; winnerIdx=wIdx; showOver(); } }
+      else if(msg.t==="winner"){ const wIdx=msg.winner==="host"?0:1; if(sim&&sim.phase!=="over"){ endTie=!!msg.tie; sim.winner=wIdx; sim.phase="over"; phase="over"; winnerIdx=wIdx; showOver(); } }
+      else if(msg.t==="tolobby"){ handleTolobbyFromPeer(); }
       else if(msg.t==="rematch"){ rematchTheirs=true; if(rematchMine) resetFight(); }
       else if(msg.t==="start"){ /* lobby start handled in app */ }
     };

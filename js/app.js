@@ -36,6 +36,11 @@ function mysteryDetail(){ return `<div class="detail mystery-detail">
   <div class="detail-body"><h3 class="mystery-title">隨機格鬥家 <span>🎲 已選擇隨機</span></h3>
   <p>你目前選擇的是隨機選角。角色在開戰前保密：選角階段看不到是哪一位，性能與招式也一併保密，要到對戰開始才會揭曉。</p>
   <p class="mystery-lock">想改也沒問題：直接點其他角色卡就能改選那一位；想回到隨機，再點一次「隨機選角」即可。直接開始的話，開戰畫面就會揭曉你的格鬥家。</p></div></div>`; }
+function mysteryCpuDetail(){ return `<div class="detail mystery-detail">
+  <div class="mystery-img"><span class="mystery-q">?</span><span class="mystery-dice">🎲</span></div>
+  <div class="detail-body"><h3 class="mystery-title">電腦・隨機格鬥家 <span>🎲 預設隨機</span></h3>
+  <p>你沒有特別幫電腦指定角色，所以電腦預設是隨機選角：會抽到哪一位保密，要到對戰開始才會揭曉。</p>
+  <p class="mystery-lock">想指定給電腦也沒問題：直接點其他角色卡，就能把那一位指定給電腦；想回到隨機，再點一次「隨機選角」即可。</p></div></div>`; }
 function cleanupScreen(){ if(currentBattle){ currentBattle.destroy(); currentBattle=null; } if(screenCleanup){ screenCleanup(); screenCleanup=null; } }
 function setBgmBtn(){ const b=document.getElementById("bgmBtn"); if(!b)return; b.textContent=bgm.enabled?"🎵 BGM 開":"🔇 BGM 關"; b.classList.toggle("on",bgm.enabled); }
 
@@ -48,13 +53,13 @@ function showMenu(errMsg){
     <div class="hero-mobile"><img src="${PORTRAITS.gouki}" alt=""><span class="vs-i">VS</span><img src="${PORTRAITS.yuki}" alt=""></div></div>
   ${errMsg?`<p class="err-banner">${errMsg}</p>`:""}
   <div class="mode-grid">
-    <section class="mode-card"><div class="mode-emoji">🤖</div><h2>電腦對戰</h2><p>一個人也能打，選好難度立刻開戰。</p>
+    <section class="mode-card"><div class="mode-emoji">🤖</div><h2>電腦對戰</h2><p>一個人也能打：先選自己的角色，再幫電腦選角（不選的話電腦預設隨機）。</p>
       <div class="diff-row">${DIFFS.map(d=>`<button type="button" class="diff ${difficulty===d.id?"sel":""}" data-diff="${d.id}">${d.label}<span>${d.desc}</span></button>`).join("")}</div>
       <button class="btn-primary big" id="cpuBtn">選角開戰 →</button></section>
     <section class="mode-card"><div class="mode-emoji">🎮</div><h2>雙人同機</h2><p>同一台裝置、同一副鍵盤，兩個人輪流選角正面對決。</p>
       <ul class="keys-list"><li><b>P1：</b>A/D 移動・W 跳躍・S 蹲下，F / G / H 出招，T 大招</li><li><b>P2：</b>方向鍵移動，J / K / L 出招，I 大招</li></ul>
       <button class="btn-ghost big" id="localBtn">雙人選角 →</button></section>
-    <section class="mode-card online"><div class="mode-emoji">🌐</div><h2>線上真人對戰</h2><p>開房間產生邀請碼，或輸入朋友的代碼加入他的擂台。（P2P 直連：房主要保持頁面開啟）</p>
+    <section class="mode-card online"><div class="mode-emoji">🌐</div><h2>線上真人對戰</h2><p>開房間產生邀請碼，或輸入朋友的代碼加入他的擂台。打完一場可直接回房間換角色／場地再戰，不用重輸邀請碼。（P2P 直連：房主要保持頁面開啟）</p>
       <button class="btn-cyan big" id="createBtn">建立房間・拿邀請碼</button>
       <div class="join-row"><input id="joinInput" maxlength="6" placeholder="輸入 6 碼邀請碼" value="${joinCode}" autocapitalize="characters"><button class="btn-ghost" id="joinBtn">加入</button></div>
       <p class="err hidden" id="menuErr"></p></section>
@@ -82,10 +87,13 @@ function showMenu(errMsg){
 
 function showSelect(purpose, p1){
   cleanupScreen(); bgm.setMode("menu");
-  let sel = purpose==="local2" && p1 && p1!==RANDOM_CHAR ? (FIGHTERS.find(f=>f.id!==p1)||FIGHTERS[0]).id : FIGHTERS[0].id;
-  let randomSelected=false;
+  let sel = (purpose==="local2"||purpose==="cpu2") && p1 && p1!==RANDOM_CHAR ? (FIGHTERS.find(f=>f.id!==p1)||FIGHTERS[0]).id : FIGHTERS[0].id;
+  /* 電腦對戰第二段（cpu2・幫電腦選角）：預設就是隨機——真人沒有特別指定時，
+     電腦維持隨機選角；點了任何一張角色卡才改成指定給電腦。 */
+  let randomSelected = purpose==="cpu2";
   const p1Label = p1===RANDOM_CHAR ? "隨機格鬥家（開戰才揭曉）" : `${fighterById(p1||"").name}・${fighterById(p1||"").title}`;
-  const heads={ cpu:["選擇你的格鬥家",`電腦難度：${(DIFFS.find(d=>d.id===difficulty)||DIFFS[1]).label}，對手將隨機出場；也可選隨機選角，開戰才揭曉`,"開始對戰"],
+  const heads={ cpu:["選擇你的格鬥家",`電腦難度：${(DIFFS.find(d=>d.id===difficulty)||DIFFS[1]).label}，先選你的角色，下一步再幫電腦選角；也可選隨機選角，開戰才揭曉`,"確定，幫電腦選角"],
+    cpu2:["幫電腦選擇格鬥家",`你已選 ${p1Label}，這次換幫電腦選：保持隨機的話，電腦預設隨機出場、開戰才揭曉；也可以點一位角色直接指定給電腦`,"開始對戰"],
     local1:["P1 選擇格鬥家","左方玩家先選，選好換 P2；也可選隨機選角，開戰才揭曉","確定，換 P2 選角"],
     local2:["P2 選擇格鬥家",`P1 已選 ${p1Label}，換右方玩家；也可選隨機選角，開戰才揭曉`,"開始對戰"],
     "online-create":["選角後建立房間","選好角色就會產生 6 碼邀請碼","建立房間"],
@@ -104,19 +112,27 @@ function showSelect(purpose, p1){
     const rc=appEl.querySelector("#randomCard"); if(rc){ rc.classList.toggle("sel",randomSelected); rc.disabled=false; }
     const rb=appEl.querySelector("#randomBtn"); if(rb){ rb.disabled=false; rb.textContent=randomSelected?"🎲 已選隨機選角（可改選其他角色）":"🎲 隨機選角（開戰才揭曉）"; }
     const rn=appEl.querySelector("#randomNote");
-    if(randomSelected){ appEl.querySelector("#selDetail").innerHTML=mysteryDetail(); if(rn){ rn.textContent="🎲 目前是隨機選角：不知道會抽到誰，開戰才揭曉。想改的話，直接點其他角色卡就能改選。"; rn.classList.remove("hidden"); } }
+    if(randomSelected){ appEl.querySelector("#selDetail").innerHTML=purpose==="cpu2"?mysteryCpuDetail():mysteryDetail(); if(rn){ rn.textContent=purpose==="cpu2"?"🎲 電腦目前是預設隨機：不特別指定就會隨機出場，開戰才揭曉。想指定給電腦的話，直接點其他角色卡即可。":"🎲 目前是隨機選角：不知道會抽到誰，開戰才揭曉。想改的話，直接點其他角色卡就能改選。"; rn.classList.remove("hidden"); } }
     else { appEl.querySelector("#selDetail").innerHTML=fighterDetail(fighterById(sel)); if(rn) rn.classList.add("hidden"); }
   };
   appEl.querySelectorAll(".card[data-id]").forEach(c=>c.addEventListener("click",()=>{ randomSelected=false; sel=c.dataset.id; bgm.unlock(); bgm.playSelect(); renderSel(); }));
   const pickRandom=()=>{ randomSelected=true; bgm.unlock(); bgm.playSelect(); renderSel(); };
   const rb1=appEl.querySelector("#randomBtn"); if(rb1)rb1.addEventListener("click",pickRandom);
   const rc1=appEl.querySelector("#randomCard"); if(rc1)rc1.addEventListener("click",pickRandom);
+  if(purpose==="cpu2") renderSel(); // 幫電腦選角的初始畫面就要呈現「預設隨機」狀態（問號詳情＋隨機卡選中）
   appEl.querySelector("#backBtn").addEventListener("click",()=>showMenu());
   appEl.querySelector("#confirmBtn").addEventListener("click",()=>{
     const errEl=appEl.querySelector("#selErr"), busyEl=appEl.querySelector("#selBusy");
     const fail=(m)=>{ errEl.textContent=m; errEl.classList.remove("hidden"); busyEl.classList.add("hidden"); };
     const myChar = randomSelected ? RANDOM_CHAR : sel;
-    if(purpose==="cpu"){ const me=resolveFighterId(myChar); const pool=FIGHTERS.filter(f=>f.id!==me); startBattleScreen(me,pool[Math.floor(Math.random()*pool.length)].id,"cpu",null); }
+    if(purpose==="cpu"){ showSelect("cpu2",myChar); }
+    else if(purpose==="cpu2"){ const me=resolveFighterId(p1);
+      /* 電腦角色：真人有指定就用指定的；保持隨機（沒特別選）就開戰這一刻才抽，
+         抽的時候比照舊行為避開真人的角色，不會抽到跟真人同一隻。 */
+      let cpuChar;
+      if(myChar===RANDOM_CHAR){ const pool=FIGHTERS.filter(f=>f.id!==me); cpuChar=pool[Math.floor(Math.random()*pool.length)].id; }
+      else cpuChar=myChar;
+      startBattleScreen(me,cpuChar,"cpu",null); }
     else if(purpose==="local1"){ showSelect("local2",myChar); }
     else if(purpose==="local2"){ startBattleScreen(resolveFighterId(p1),resolveFighterId(myChar),"local",null); }
     else if(purpose==="online-create"){ busyEl.classList.remove("hidden"); errEl.classList.add("hidden");
@@ -134,7 +150,10 @@ function showSelect(purpose, p1){
 function startBattleScreen(p1,p2,opponent,onlineInfo,stageId){
   cleanupScreen();
   appEl.innerHTML=`<div class="wrap" id="battleHost"></div>`;
-  currentBattle=startBattle(appEl.querySelector("#battleHost"),{ p1Char:p1, p2Char:p2, opponent, difficulty, stageId:stageId||selectedStage, onExit:()=>{ if(opponent==="online"){ Net.destroy(); } showMenu(); } });
+  currentBattle=startBattle(appEl.querySelector("#battleHost"),{ p1Char:p1, p2Char:p2, opponent, difficulty, stageId:stageId||selectedStage, onExit:()=>{ if(opponent==="online"){ Net.destroy(); } showMenu(); },
+    /* 賽後回線上房間：連線不拆（同一個房間、同一個對手、免重輸邀請碼），
+       只切回大廳畫面；準備狀態與選場地權已由 battle／Net 在回房間時重置。 */
+    onReturnToLobby:()=>{ showLobby(); } });
 }
 
 function showLobby(){
@@ -144,6 +163,7 @@ function showLobby(){
   <div class="code-row"><span class="code-box" id="lobbyCode">${Net.code||"······"}</span><button class="btn-ghost small" id="copyBtn">複製</button></div>
   <p class="lobby-sub">${Net.role==="host"?"把邀請碼傳給朋友，他在主選單輸入代碼就能加入":"你已加入房間，選好角色後按下準備"}</p></div>
   <p class="err-banner hidden" id="lobbyErr"></p>
+  <p class="info-banner hidden" id="lobbyReturnNote">🏠 已回到房間：對手還是上一局的對手，不用重新輸入邀請碼。換好角色、由指定的一方選好場地後，雙方再按「準備開戰」就會開下一場。</p>
   <div class="vs-grid" id="lobbyVs"></div>
   <h3 class="change-h">更換我的角色</h3><div class="char-pills" id="charPills"></div>
   <h3 class="change-h">對戰場景 <span id="lobbyStageNote"></span></h3><div id="lobbyStage"></div>
@@ -153,7 +173,10 @@ function showLobby(){
   const errEl=appEl.querySelector("#lobbyErr");
   Net.onError=(m)=>{ errEl.textContent=m; errEl.classList.remove("hidden"); };
   Net.onPeerLeft=()=>{ if(!started){ errEl.textContent="對手已離開房間"; errEl.classList.remove("hidden"); } };
-  Net.onMessage=(msg)=>{ if(msg.t==="start"&&!started){ if(!fighterExists(msg.hostChar)||!fighterExists(msg.guestChar))return; started=true; startBattleScreen(msg.hostChar,msg.guestChar,"online",null,msg.stage||Net.myStage); } };
+  Net.onMessage=(msg)=>{ if(msg.t==="tolobby"){ /* 對方已按回房間而我方已先回到大廳（或雙方同時按）：
+       Net 連線層已套用回房間狀態，這裡只要重整大廳畫面即可，不拆連線。 */
+      if(typeof Net._emitLobby==="function") Net._emitLobby(); return; }
+    if(msg.t==="start"&&!started){ if(!fighterExists(msg.hostChar)||!fighterExists(msg.guestChar))return; started=true; startBattleScreen(msg.hostChar,msg.guestChar,"online",null,msg.stage||Net.myStage); } };
   const render=(st)=>{
     appEl.querySelector("#lobbyCode").textContent=st.code||"······";
     const meIsRandom = st.myChar===RANDOM_CHAR || st.myRandomLocked;
@@ -170,21 +193,38 @@ function showLobby(){
     pillsEl.innerHTML=FIGHTERS.map(f=>`<button type="button" class="pill ${!meIsRandom&&st.myChar===f.id?"sel":""}" data-id="${f.id}" ${!meIsRandom&&st.myChar===f.id?`style="background:${f.accent}"`:""}><img src="${PORTRAITS[f.id]}" alt="">${f.name}・${f.title}</button>`).join("")+`<button type="button" class="pill random-pill ${meIsRandom?"sel":""}" data-random="1">🎲 隨機選角（開戰才揭曉）</button>`+(meIsRandom?`<span class="lobby-lock-note">目前是隨機：開戰才揭曉，點其他角色即可改選。</span>`:"");
     pillsEl.querySelectorAll(".pill[data-id]").forEach(b=>b.addEventListener("click",()=>Net.setChar(b.dataset.id)));
     const rp=pillsEl.querySelector("[data-random]"); if(rp)rp.addEventListener("click",()=>{ if(typeof Net.setRandom==="function")Net.setRandom(); else Net.setChar(RANDOM_CHAR); });
+    const rn2=appEl.querySelector("#lobbyReturnNote"); if(rn2) rn2.classList.toggle("hidden", !st.hasPlayed);
     const lsNote=appEl.querySelector("#lobbyStageNote"), ls=appEl.querySelector("#lobbyStage");
     if(ls&&lsNote){
-      if(st.role==="host"){ lsNote.textContent="（你是房主，由你決定，雙方同場）";
-        ls.innerHTML=stageGridHTML(st.myStage||"neon");
+      /* 場地選擇權：第一場由房主選；賽後回房間改由「上一局輸家」選（不論房主或訪客）；
+         上一局平手／無輸家時維持房主選。有選擇權的一方看到可點選的場地格，
+         另一方只看對方選的結果，標示要讓雙方都清楚這一場由誰選。 */
+      const mySide = st.role==="host" ? 0 : 1;
+      const chooserSide = st.stageChooserSide===1 ? 1 : 0;
+      const amChooser = mySide===chooserSide;
+      const chooserStage = amChooser ? (st.myStage||"neon") : st.oppStage;
+      if(!st.hasPlayed){
+        lsNote.textContent = amChooser ? "（第一場・由你選場地，雙方同場）" : "（第一場・由房主選場地，雙方同場）";
+      } else if(st.lastLoserSide===0 || st.lastLoserSide===1){
+        lsNote.textContent = amChooser ? "（🏟️ 上一局落敗，由你選場地）" : "（🏟️ 上一局對方落敗，由對方選場地・等對方選場地）";
+      } else {
+        lsNote.textContent = amChooser ? "（上一局平手／無輸家，維持由房主選場地）" : "（上一局平手／無輸家，維持由房主選場地・等房主選）";
+      }
+      if(amChooser){
+        ls.innerHTML=stageGridHTML(chooserStage||"neon");
         ls.querySelectorAll("[data-stage]").forEach(b=>b.addEventListener("click",()=>{ selectedStage=b.dataset.stage; saveStage(); Net.setStage(b.dataset.stage); }));
-      } else { lsNote.textContent="（由房主決定，雙方同場）";
-        if(st.oppStage==="random"){ ls.innerHTML=`<div class="lobby-stage-view"><span class="stage-dice big-dice">🎲</span><div><b>隨機場景</b><span>房主選了隨機，開戰時揭曉，雙方會看到同一個場景</span></div></div>`; }
-        else if(st.oppStage){ const hs=stageById(st.oppStage); ls.innerHTML=`<div class="lobby-stage-view"><img src="${hs.thumb}" alt="${hs.name}場景預覽"><div><b>${hs.name}・${hs.en}</b><span>${hs.desc}</span></div></div>`; }
-        else { ls.innerHTML=`<p class="lobby-sub">等待房主設定場景…</p>`; }
+      } else {
+        if(chooserStage==="random"){ ls.innerHTML=`<div class="lobby-stage-view"><span class="stage-dice big-dice">🎲</span><div><b>隨機場景</b><span>選場地的一方選了隨機，開戰時揭曉，雙方會看到同一個場景</span></div></div>`; }
+        else if(chooserStage){ const hs=stageById(chooserStage); ls.innerHTML=`<div class="lobby-stage-view"><img src="${hs.thumb}" alt="${hs.name}場景預覽"><div><b>${hs.name}・${hs.en}</b><span>${hs.desc}</span></div></div>`; }
+        else { ls.innerHTML=`<p class="lobby-sub">等待對方選場地…</p>`; }
       }
     }
     const rb=appEl.querySelector("#readyBtn");
     rb.disabled=!st.oppChar;
     rb.textContent=!st.oppChar?"等待對手加入…":st.myReady?"✓ 已準備（點按取消）":"準備開戰！";
     rb.classList.toggle("ready-on",st.myReady);
+    /* 回房間後若連線其實已斷（對方在結算畫面直接離開），不要讓畫面看起來還能開戰 */
+    if(st.hasPlayed && !st.connected){ rb.disabled=true; rb.textContent="對手已離開房間"; errEl.textContent="對手已離開房間，無法在這個房間繼續，請回主選單重新邀請"; errEl.classList.remove("hidden"); }
     appEl.querySelector("#waitNote").classList.toggle("hidden",!(st.oppChar&&st.myReady&&!st.oppReady));
   };
   Net.onLobby=render;
