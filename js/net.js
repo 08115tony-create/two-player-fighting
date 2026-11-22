@@ -20,6 +20,10 @@ const Net = {
      （lastLoserSide=null 且 hasPlayed=true）維持房主選。 */
   stageChooserSide: 0, lastLoserSide: null, hasPlayed: false, lastRoundTie: false,
   myRandomLocked: false, oppRandomLocked: false, _startSent: false,
+  /* 快照序號（連線級）：_snapOut 是本端送出快照的計數、_snapN 是已接受的
+     對方快照高水位，兩者都跟著「連線」走、不跟著單場比賽走。回房間再戰時
+     連線不拆，這兩個值不歸零；只有新連線（_setupConn）或 destroy 才重置。 */
+  _snapOut: 0, _snapN: -1,
   onLobby: null,   // (state) => void
   onMessage: null, // (msg) => void  (battle-phase messages)
   onPeerLeft: null,
@@ -30,6 +34,13 @@ const Net = {
   _emitLobby(){ if(this.onLobby) this.onLobby(this._lobbyState()); },
 
   send(obj){ try{ if(!(this.conn && this.conn.open)) return;
+    /* 快照序號由連線層在這裡統一蓋章（_snapOut 整條連線單調遞增），對戰層
+       不再自己編號。舊作法每個對戰實例從 0 重新計數：回房間開新一場時，
+       新實例的快照序號從 1 起，全部 <= 接收端連線級高水位 _snapN（保留著
+       上一場的尾數），在連線層就被當成過時快照全數丟棄——對戰畫面永遠
+       收不到對手的新位置／攻擊，雙方都只看到自己在動、對手凍在出生點
+       （再戰一場沒事，是因為同一實例序號繼續往上加、沒有歸零）。 */
+    if(obj && obj.t==="snap" && obj.snap) obj.snap.n = ++this._snapOut;
     /* 快照是「最新狀態覆蓋舊狀態」型資料：傳輸緩衝已壅塞時直接丟棄這一幀，
        不要讓舊快照在 WebRTC reliable 通道裡排隊累積 — 那會造成連線對戰
        打沒多久就越來越卡、人物追著過時位置跑甚至像凍住。控制訊息不丟。 */
@@ -57,7 +68,7 @@ const Net = {
   },
 
   _setupConn(conn){
-    this.conn = conn; this._snapN = -1;
+    this.conn = conn; this._snapN = -1; this._snapOut = 0; // 新連線：快照序號兩方向都從頭開始
     conn.on("open", ()=>{ this.connected = true; this.sendLobby(); this._emitLobby(); });
     conn.on("data", (msg)=>{ if(!msg || typeof msg!=="object") return;
       /* 過時快照直接丟棄：只接受序號比已處理更新的，避免壅塞後抵達的舊狀態把人物拉回舊位置／舊姿勢 */
@@ -154,6 +165,6 @@ const Net = {
   destroy(){
     try{ if(this.conn) this.conn.close(); }catch(e){}
     try{ if(this.peer) this.peer.destroy(); }catch(e){}
-    this.peer=null; this.conn=null; this.connected=false; this.oppChar=null; this.oppStage=null; this.myReady=false; this.oppReady=false; this._snapN=-1; this.myRandomLocked=false; this.oppRandomLocked=false; this._startSent=false; this.stageChooserSide=0; this.lastLoserSide=null; this.hasPlayed=false; this.lastRoundTie=false;
+    this.peer=null; this.conn=null; this.connected=false; this.oppChar=null; this.oppStage=null; this.myReady=false; this.oppReady=false; this._snapN=-1; this._snapOut=0; this.myRandomLocked=false; this.oppRandomLocked=false; this._startSent=false; this.stageChooserSide=0; this.lastLoserSide=null; this.hasPlayed=false; this.lastRoundTie=false;
   }
 };

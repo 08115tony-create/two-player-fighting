@@ -83,7 +83,7 @@ function startBattle(container, opts){
   let destroyed=false, raf=0, sim=null;
   const keys=emptyInput(), keys2=emptyInput(), touch=emptyInput(), touch2=emptyInput();
   let cpu={nextThink:0,plan:emptyInput(),planUntil:0};
-  let remoteSnap=null, appliedSnap=null, snapSendSeq=0, lastRemoteSeq=0, remoteAtkStart=0, pendingRemote=null, introStage=-1;
+  let remoteSnap=null, appliedSnap=null, lastRemoteSeq=0, remoteAtkStart=0, pendingRemote=null, introStage=-1;
   /* 線上扣血改「攻擊方判定、防守方套用」：攻擊方在自己畫面上命中（與離線同一套
      距離判定，看到打中就是打中）就送 {t:"hit", atk, seq} 事件；防守方以 atkSeq
      去重、只套用一次傷害。舊作法是在防守方用攻擊開始時的舊位置對防守方現在的
@@ -761,7 +761,10 @@ function startBattle(container, opts){
     syncTimer=setInterval(()=>{
       if(destroyed||!sim)return;
       const local=sim.fighters[playerSide]; if(!local)return;
-      Net.send({t:"snap", snap:{ n:++snapSendSeq, x:Math.round(local.x), y:Math.round(local.y), hp:Math.round(local.hp), energy:Math.round(local.energy), facing:local.facing, crouch:local.crouch, atk:local.atk, seq:local.atkSeq, ko:local.ko, hitT:Math.round(local.hitT), eff:{ inv:Math.max(0,Math.round(local.invUntil-sim.time)), bst:Math.max(0,Math.round(local.atkBoostUntil-sim.time)), ref:Math.max(0,Math.round(local.reflectUntil-sim.time)), lok:Math.max(0,Math.round(local.ultLockUntil-sim.time)), frz:Math.max(0,Math.round(local.frozenUntil-sim.time)) } }});
+      /* 快照序號 n 不在這裡編：由 Net.send 統一蓋連線級單調遞增序號。
+         若由每個對戰實例從 0 計數，回房間開新一場時序號會小於接收端保留的
+         連線級高水位，快照被當成過時全數丟棄、對手在畫面上凍住不動。 */
+      Net.send({t:"snap", snap:{ x:Math.round(local.x), y:Math.round(local.y), hp:Math.round(local.hp), energy:Math.round(local.energy), facing:local.facing, crouch:local.crouch, atk:local.atk, seq:local.atkSeq, ko:local.ko, hitT:Math.round(local.hitT), eff:{ inv:Math.max(0,Math.round(local.invUntil-sim.time)), bst:Math.max(0,Math.round(local.atkBoostUntil-sim.time)), ref:Math.max(0,Math.round(local.reflectUntil-sim.time)), lok:Math.max(0,Math.round(local.ultLockUntil-sim.time)), frz:Math.max(0,Math.round(local.frozenUntil-sim.time)) } }});
     },50);
   }
   // ---------- keyboard ----------
